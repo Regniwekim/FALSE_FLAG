@@ -31,7 +31,6 @@ services:
   - type: web
     name: false-flag-frontend
     runtime: static
-    plan: free
     autoDeployTrigger: commit
     previews:
       generation: manual
