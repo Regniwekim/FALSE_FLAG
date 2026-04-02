@@ -82,9 +82,11 @@
   3. No opponent secret leaks in any payload.
 
 4. Week 3. Feature complete UI and championship mode
-- Current status (2026-04-02): In progress. First Week 3 frontend slice landed and has been restyled into a 80s/vaporwave aesthetic: deep purple/blue backgrounds with bright cyan and magenta neon accents, monospace font for retro-futuristic feel, and scanline overlay effects. Championship header and score ribbon read as mission intel, the board is rendered as an interactive world map with country markers in neon cyan, round desk is framed as an intel desk, chat uses an intercept-channel treatment, and the filtered guess modal plus match-over new-room affordance remain in place. All UI elements now feature prominent neon glow effects and color-coordinated player indicator dots.
+- Current status (2026-04-02): Completed and sign-off ready. Week 3 frontend is fully landed in a vaporwave presentation (neon championship header/score ribbon, interactive world map board, intel desk framing, intercept-style chat), with LAN/mobile usability refinements and accessible custom guess picker interactions (flag icons, keyboard letter navigation, modal focus trap, and outside-click/Escape close).
 - Additional progress (2026-04-02): Match-over controls now expose explicit `Rematch` and `New Room` actions in the championship result card, replacing the prior generic new-game affordance in the normal action row.
-- Test status (2026-04-02): Frontend component tests passing for score ribbon and guess modal behavior; backend tests (21/21), workspace typecheck, workspace build, and Playwright two-client browser flows (2/2) all pass after the Week 3 vaporwave 80s aesthetic theme upgrade.
+- Additional progress (2026-04-02): Round-transition UX now includes a visible `NEXT ROUND INITIALIZING...` banner between non-final rounds, with server-authoritative delayed auto-init under 2 seconds and explicit integration/E2E coverage.
+- Test status (2026-04-02): Validation is fully green for Week 3 sign-off: backend tests (22/22), frontend component tests (10/10), Playwright E2E flows (3/3, including mobile portrait and transition banner lifecycle), workspace `typecheck`, and workspace `build` all pass.
+- Week 3 sign-off status: Completed on 2026-04-02.
 - Build components listed in plan.html:
   1. Header with player labels and score.
   2. Secret slot.

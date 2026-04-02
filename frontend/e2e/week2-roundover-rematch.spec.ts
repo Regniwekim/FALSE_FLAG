@@ -39,6 +39,13 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
     await page.getByRole("combobox", { name: "Guess flag" }).click();
     await page.getByRole("option", { name: ownSecretText }).click();
     await page.getByRole("button", { name: "Confirm Guess" }).click();
+
+    if (round < 3) {
+      const transitionBanner = page.getByText("NEXT ROUND INITIALIZING...");
+      await expect(transitionBanner).toBeVisible();
+      await expect(page.getByText(new RegExp(`Round\\s+${round + 1}`, "i"))).toBeVisible();
+      await expect(transitionBanner).toHaveCount(0);
+    }
   }
 
   await expect(page.getByText(/Match winner:/i)).toBeVisible();
