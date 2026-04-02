@@ -1,0 +1,71 @@
+services:
+  - type: web
+    name: false-flag-backend
+    runtime: node
+    plan: starter
+    region: oregon
+    autoDeployTrigger: commit
+    previews:
+      generation: manual
+    buildCommand: npm ci && npm run build -w shared && npm run build -w backend
+    startCommand: node backend/dist/server.js
+    healthCheckPath: /health
+    maxShutdownDelaySeconds: 60
+    buildFilter:
+      paths:
+        - backend/**
+        - shared/**
+        - package.json
+        - package-lock.json
+        - render.yaml
+      ignoredPaths:
+        - docs/**
+        - references/**
+        - roadmap.md
+        - plan.html
+        - index.html
+        - README.md
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+  - type: web
+    name: false-flag-frontend
+    runtime: static
+    plan: free
+    autoDeployTrigger: commit
+    previews:
+      generation: manual
+    buildCommand: npm ci && npm run build -w shared && npm run build -w frontend
+    staticPublishPath: frontend/dist
+    buildFilter:
+      paths:
+        - frontend/**
+        - shared/**
+        - package.json
+        - package-lock.json
+        - render.yaml
+      ignoredPaths:
+        - docs/**
+        - references/**
+        - roadmap.md
+        - plan.html
+        - index.html
+        - README.md
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+    envVars:
+      - key: VITE_SOCKET_URL
+        sync: false

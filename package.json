@@ -13,7 +13,8 @@
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w backend && npm run typecheck -w frontend",
     "test": "npm run test -w backend",
     "test:frontend": "npm run test -w frontend",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "smoke:render": "node scripts/render-smoke-check.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",

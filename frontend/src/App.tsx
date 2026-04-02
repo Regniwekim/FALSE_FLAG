@@ -338,15 +338,35 @@ export function App() {
   useEffect(() => {
     socket.connect();
 
-    socket.on("connect", () => {
+    const onConnect = () => {
       setConnected(true);
       setStatus("Connected to server");
-    });
+    };
 
-    socket.on("disconnect", () => {
+    const onDisconnect = () => {
       setConnected(false);
       setStatus("Disconnected");
-    });
+    };
+
+    const onConnectError = () => {
+      setStatus("Connection lost. Retrying...");
+    };
+
+    const onReconnectAttempt = (attempt: number) => {
+      setStatus(`Reconnecting (attempt ${attempt})...`);
+    };
+
+    const onReconnectFailed = () => {
+      setStatus("Unable to reconnect to server.");
+    };
+
+    const manager = socket.io;
+
+    socket.on("connect", onConnect);
+    socket.on("disconnect", onDisconnect);
+    socket.on("connect_error", onConnectError);
+    manager?.on("reconnect_attempt", onReconnectAttempt);
+    manager?.on("reconnect_failed", onReconnectFailed);
 
     socket.on(SERVER_TO_CLIENT.ROOM_CREATED, (payload: RoomCreatedPayload) => {
       setPlayerId(payload.playerId);
@@ -459,6 +479,11 @@ export function App() {
     });
 
     return () => {
+      socket.off?.("connect", onConnect);
+      socket.off?.("disconnect", onDisconnect);
+      socket.off?.("connect_error", onConnectError);
+      manager?.off("reconnect_attempt", onReconnectAttempt);
+      manager?.off("reconnect_failed", onReconnectFailed);
       socket.removeAllListeners();
       socket.disconnect();
     };

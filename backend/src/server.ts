@@ -21,6 +21,29 @@ import type { RoomState } from "./types.js";
 
 const NEXT_ROUND_TRANSITION_MS = 1200;
 
+function getAllowedOrigins() {
+  return (process.env.CORS_ORIGINS ?? "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+}
+
+function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]) {
+  if (!origin) {
+    return true;
+  }
+
+  if (allowedOrigins.length === 0) {
+    return true;
+  }
+
+  if (allowedOrigins.includes("*")) {
+    return true;
+  }
+
+  return allowedOrigins.includes(origin);
+}
+
 function emitError(socket: Socket, code: string, message: string) {
   socket.emit(SERVER_TO_CLIENT.ACTION_ERROR, { code, message });
 }
@@ -42,14 +65,42 @@ function emitPrivateState(io: Server, gameEngine: GameEngine, room: RoomState) {
 
 export function createRealtimeApp() {
   const app = express();
-  app.use(cors());
+  const allowedOrigins = getAllowedOrigins();
+
+  if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "test") {
+    console.warn("CORS_ORIGINS is not set. Allowing all origins.");
+  } else if (allowedOrigins.length > 0) {
+    console.log(`CORS allowlist enabled for ${allowedOrigins.length} origin(s).`);
+  }
+
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (isAllowedOrigin(origin, allowedOrigins)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error("Origin not allowed by CORS policy."));
+      }
+    })
+  );
   app.get("/health", (_req: express.Request, res: express.Response) => {
     res.json({ ok: true });
   });
 
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
-    cors: { origin: "*" }
+    cors: {
+      origin: (origin, callback) => {
+        if (isAllowedOrigin(origin, allowedOrigins)) {
+          callback(null, true);
+          return;
+        }
+
+        callback(new Error("Origin not allowed by CORS policy."), false);
+      }
+    }
   });
 
   const roomManager = new RoomManager();
@@ -378,5 +429,35 @@ export function startServer(
 }
 
 if (process.env.NODE_ENV !== "test") {
-  void startServer();
+  void (async () => {
+    const runningServer = await startServer();
+    let isShuttingDown = false;
+
+    const shutdown = (signal: NodeJS.Signals) => {
+      if (isShuttingDown) {
+        return;
+      }
+
+      isShuttingDown = true;
+      console.log(`Received ${signal}. Closing server gracefully...`);
+      void runningServer
+        .close()
+        .then(() => {
+          console.log("Server closed successfully.");
+          process.exit(0);
+        })
+        .catch((error) => {
+          console.error("Server shutdown failed.", error);
+          process.exit(1);
+        });
+    };
+
+    process.once("SIGTERM", () => {
+      shutdown("SIGTERM");
+    });
+
+    process.once("SIGINT", () => {
+      shutdown("SIGINT");
+    });
+  })();
 }
