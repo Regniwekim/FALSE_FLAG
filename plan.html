@@ -1,0 +1,303 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FALSE_FLAG - OFFICIAL DEVELOPER HANDBOOK v1.0</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        :root {
+            --red: #ff2d55;
+            --blue: #00d4ff;
+            --primary: #00ff9d;
+            --accent: #ff00aa;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0a001f, #001a33);
+            color: #fff;
+            font-family: 'Press Start 2P', system-ui;
+            line-height: 1.4;
+            min-height: 100vh;
+        }
+        
+        header {
+            background: rgba(0,0,0,0.9);
+            padding: 25px 40px;
+            border-bottom: 12px solid var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 0 40px var(--accent);
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin: 0;
+            text-shadow: 0 0 25px var(--primary);
+            letter-spacing: 8px;
+        }
+        
+        .tagline {
+            font-size: 1.1rem;
+            color: var(--accent);
+            margin: 0;
+        }
+        
+        .badge {
+            background: #ff0;
+            color: #111;
+            padding: 8px 24px;
+            border-radius: 9999px;
+            font-size: 0.9rem;
+            box-shadow: 0 0 20px #ff0;
+            animation: pulse 2s infinite;
+        }
+        
+        main {
+            max-width: 1280px;
+            margin: 40px auto;
+            padding: 0 40px;
+        }
+        
+        section {
+            background: rgba(255,255,255,0.06);
+            border: 6px solid var(--primary);
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 40px;
+        }
+        
+        h2 {
+            color: var(--accent);
+            font-size: 1.6rem;
+            margin-top: 0;
+            border-bottom: 4px solid var(--accent);
+            padding-bottom: 12px;
+        }
+        
+        h3 {
+            color: #00ff9d;
+            margin: 28px 0 12px;
+        }
+        
+        ul, ol {
+            padding-left: 28px;
+        }
+        
+        li {
+            margin-bottom: 12px;
+        }
+        
+        code {
+            background: #111;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            color: var(--primary);
+        }
+        
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        .table th, .table td {
+            border: 3px solid #333;
+            padding: 14px;
+            text-align: left;
+            font-size: 0.9rem;
+        }
+        
+        .table th {
+            background: #111;
+            color: var(--accent);
+        }
+        
+        .phase {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+            background: rgba(0,255,157,0.1);
+            border: 4px dashed var(--primary);
+            padding: 20px;
+            border-radius: 12px;
+            margin: 20px 0;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 40px 20px;
+            font-size: 0.8rem;
+            color: #666;
+            border-top: 6px solid #222;
+        }
+        
+        .handover-note {
+            background: #ff00aa;
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 1.1rem;
+            margin: 40px 0;
+            box-shadow: 0 0 30px var(--accent);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>FALSE_FLAG</h1>
+            <p class="tagline">OFFICIAL DEVELOPER HANDBOOK v1.0 - Hand-off ready for any coding agent</p>
+        </div>
+        <div class="badge">COMPLETE MULTIPLAYER PROJECT SPEC</div>
+        <div style="text-align:right">
+            <strong>2-PLAYER - REAL-TIME - BROWSER-BASED</strong><br>
+            <span style="font-size:0.9rem">Inspired by classic Guess Who! - Flags instead of faces</span>
+        </div>
+    </header>
+    
+    <main>
+        <div class="handover-note">
+            <strong>This is your complete, ready-to-build project specification.</strong><br>
+            Copy-paste this entire document to your coding agent. They will have EVERYTHING needed to deliver a production-ready FALSE_FLAG game.
+        </div>
+        
+        <section>
+            <h2>1. PROJECT OVERVIEW &amp; OBJECTIVES</h2>
+            <p><strong>FALSE_FLAG</strong> is a faithful, browser-based, real-time multiplayer adaptation of the classic <em>Guess Who?</em> board game. Players identify their opponent's secret country flag by asking yes/no questions in a live chat, eliminating flags on their personal board, and guessing correctly before their opponent does.</p>
+            <p><strong>Strict rule adherence (from official Guess Who! rules):</strong></p>
+            <ul>
+                <li>Each player receives one unique random secret flag at game start</li>
+                <li>Each player has their own identical 24-flag board</li>
+                <li>Turns alternate: ask one yes/no question -> opponent answers truthfully -> asker eliminates on THEIR board only</li>
+                <li>Guess only on your turn; incorrect guess = instant loss</li>
+                <li>Chat is the only communication channel (yes/no questions only)</li>
+                <li>Support for Championship Play (best of 5)</li>
+            </ul>
+            <p>Target: Fully playable in under 60 seconds per round, perfect for quick browser sessions.</p>
+        </section>
+        
+        <section>
+            <h2>2. TECH STACK (Recommended)</h2>
+            <table class="table">
+                <tr><th>Layer</th><th>Technology</th><th>Reason</th></tr>
+                <tr><td>Frontend</td><td>Vite + React 18 + TypeScript + TailwindCSS</td><td>Modern, fast, component-based; easy to maintain the retro pixel style</td></tr>
+                <tr><td>Backend</td><td>Node.js + Express + Socket.io</td><td>Real-time bidirectional communication (required for live chat, turns, and board sync)</td></tr>
+                <tr><td>State</td><td>Server-side only (in-memory + optional Redis for scaling)</td><td>Game state must remain private (secrets never sent to clients)</td></tr>
+                <tr><td>Flags</td><td>flagcdn.com (or local SVGs)</td><td>High-quality, free country flags</td></tr>
+                <tr><td>Hosting</td><td>Vercel (frontend) + Render / Railway (backend) or single Docker container</td><td>Zero-config deployment</td></tr>
+                <tr><td>Auth / Rooms</td><td>Simple room codes (no login required)</td><td>Instant "Play with Friend" via shareable link</td></tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>3. SYSTEM ARCHITECTURE</h2>
+            <ul>
+                <li><strong>Client</strong>: React SPA - one page per player with their own board, secret slot, chat, and controls</li>
+                <li><strong>Server</strong>: Express + Socket.io server managing game rooms</li>
+                <li><strong>Game Room</strong>: One room = two players + private game state (P1 secret, P2 secret, turn, eliminated sets, chat log)</li>
+                <li><strong>Real-time sync</strong>: Server broadcasts only the information each player is allowed to see (never the opponent's secret)</li>
+            </ul>
+        </section>
+        
+        <section>
+            <h2>4. SOCKET.IO EVENT SPECIFICATION (CRITICAL)</h2>
+            <h3>Connection &amp; Lobby</h3>
+            <ul>
+                <li><code>create-room</code> -> server returns room code</li>
+                <li><code>join-room</code> (roomCode) -> both players get "game-started"</li>
+            </ul>
+            
+            <h3>Core Game Events (server validates everything)</h3>
+            <table class="table">
+                <tr><th>Event</th><th>Direction</th><th>Payload</th><th>Server Action</th></tr>
+                <tr><td>ask-question</td><td>Client -> Server</td><td>{ question: string }</td><td>Validate it ends with "?", broadcast to opponent as "incoming-question"</td></tr>
+                <tr><td>answer-question</td><td>Client -> Server</td><td>{ answer: "yes" | "no" }</td><td>Broadcast answer to asker; advance turn only after asker ends turn</td></tr>
+                <tr><td>eliminate-flag</td><td>Client -> Server</td><td>{ flagCode: string }</td><td>Update player's private eliminated set; broadcast "board-updated" to that player only</td></tr>
+                <tr><td>end-turn</td><td>Client -> Server</td><td>{}</td><td>Switch turn, notify both players</td></tr>
+                <tr><td>make-guess</td><td>Client -> Server</td><td>{ guessedFlagCode: string }</td><td>Compare to opponent secret -> emit win/lose + game-over</td></tr>
+                <tr><td>chat-message</td><td>Client -> Server</td><td>{ text: string }</td><td>Broadcast to both (for non-question chat if desired)</td></tr>
+                <tr><td>new-game</td><td>Client -> Server</td><td>{}</td><td>Reset secrets, boards, score</td></tr>
+            </table>
+        </section>
+        
+        <section>
+            <h2>5. FRONTEND COMPONENT BREAKDOWN</h2>
+            <ul>
+                <li><strong>Header</strong>: Logo + Player labels (RED / BLUE) + Score (Championship mode)</li>
+                <li><strong>Secret Slot</strong>: Shows YOUR mystery flag (never opponent's)</li>
+                <li><strong>Personal Grid</strong>: 24 clickable flag cards (6x4) with eliminate animation</li>
+                <li><strong>Live Chat</strong>: Real-time messages + YES/NO quick buttons (opponent only)</li>
+                <li><strong>Turn Indicator</strong>: Big glowing "YOUR TURN!" banner</li>
+                <li><strong>Guess Modal</strong>: Dropdown of remaining flags + Submit (instant loss on wrong guess)</li>
+                <li><strong>Mobile Responsive</strong>: Works on phones (portrait mode)</li>
+            </ul>
+        </section>
+        
+        <section>
+            <h2>6. DEVELOPMENT PHASES &amp; MILESTONES</h2>
+            
+            <div class="phase">
+                <strong>Phase 1 (Week 1)</strong>
+                <div>
+                    <strong>Core Loop MVP</strong><br>
+                    - Single HTML/JS prototype upgraded to React<br>
+                    - Hotseat mode (two players on same device)<br>
+                    - Full board + elimination + guess logic
+                </div>
+            </div>
+            
+            <div class="phase">
+                <strong>Phase 2 (Week 2)</strong>
+                <div>
+                    <strong>Socket.io Backend</strong><br>
+                    - Room system + all events above<br>
+                    - Server-side validation (no cheating)<br>
+                    - Real-time sync of chat, turns, boards
+                </div>
+            </div>
+            
+            <div class="phase">
+                <strong>Phase 3 (Week 3)</strong>
+                <div>
+                    <strong>Polish &amp; Championship Mode</strong><br>
+                    - Best-of-5 scoring<br>
+                    - Sound effects + retro animations<br>
+                    - Challenge mode (two secret flags)<br>
+                    - Shareable invite link
+                </div>
+            </div>
+            
+            <div class="phase">
+                <strong>Phase 4 (Week 4)</strong>
+                <div>
+                    <strong>Production Ready</strong><br>
+                    - Deployment scripts<br>
+                    - Anti-cheat (rate limiting, turn validation)<br>
+                    - Analytics + error tracking
+                </div>
+            </div>
+        </section>
+        
+        <section>
+            <h2>7. SECURITY &amp; ANTI-CHEAT</h2>
+            <ul>
+                <li>Secrets stored ONLY on server - never sent to clients</li>
+                <li>Server validates every action (turn ownership, guess timing)</li>
+                <li>Rate-limit chat &amp; actions</li>
+                <li>Disconnect handling: auto-pause + resume</li>
+            </ul>
+        </section>
+        
+        <section>
+            <h2>8. DELIVERABLES FOR CODING AGENT</h2>
+            <ol>
+                <li>Complete GitHub repo with /frontend and /backend folders</li>
+                <li>README with one-command run instructions (<code>npm run dev</code>)</li>
+                <li>Live demo link (Vercel + Render

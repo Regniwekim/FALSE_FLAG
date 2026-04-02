@@ -1,0 +1,671 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FALSE_FLAG - Multiplayer Guess Who with Flags</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        
+        :root {
+            --red: #ff2d55;
+            --blue: #00d4ff;
+            --primary: #00ff9d;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #0a001f, #001a33);
+            color: #fff;
+            font-family: 'Press Start 2P', system-ui;
+            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        header {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-bottom: 8px solid var(--primary);
+            box-shadow: 0 0 30px #ff00aa;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            margin: 0;
+            text-shadow: 0 0 20px var(--primary);
+            letter-spacing: 6px;
+        }
+        
+        .player-label {
+            font-size: 1rem;
+            padding: 8px 20px;
+            border-radius: 9999px;
+            font-weight: bold;
+        }
+        
+        main {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .player-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(255,255,255,0.08);
+            border: 6px solid;
+            border-radius: 16px;
+            padding: 15px;
+            position: relative;
+        }
+        
+        .player-area.red { border-color: var(--red); }
+        .player-area.blue { border-color: var(--blue); }
+        
+        .player-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 1.1rem;
+        }
+        
+        .secret-slot {
+            background: #111;
+            border: 4px solid #333;
+            padding: 8px;
+            border-radius: 12px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .secret-slot img {
+            max-height: 80px;
+            filter: brightness(1.4);
+        }
+        
+        .secret-label {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #111;
+            padding: 2px 12px;
+            border-radius: 9999px;
+            font-size: 0.7rem;
+            white-space: nowrap;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+            flex: 1;
+        }
+        
+        .card {
+            background: #fff;
+            border: 4px solid #222;
+            border-radius: 10px;
+            padding: 6px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 6px 0 #222;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .card:hover { transform: scale(1.08); }
+        .card:active { box-shadow: 0 2px 0 #222; }
+        
+        .card img {
+            width: 100%;
+            height: 70px;
+            object-fit: contain;
+            border: 2px solid #111;
+            border-radius: 6px;
+        }
+        
+        .card p {
+            margin: 6px 0 0;
+            font-size: 0.7rem;
+            color: #111;
+            font-weight: bold;
+            line-height: 1;
+        }
+        
+        .card.eliminated {
+            opacity: 0.3;
+            filter: grayscale(1);
+        }
+        
+        .card.eliminated::after {
+            content: 'X';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(12deg);
+            font-size: 3rem;
+            color: #ff00aa;
+            animation: cross-pop 0.3s ease forwards;
+        }
+        
+        @keyframes cross-pop {
+            0% { transform: translate(-50%, -50%) rotate(12deg) scale(0); }
+            100% { transform: translate(-50%, -50%) rotate(12deg) scale(1); }
+        }
+        
+        .chat-container {
+            width: 340px;
+            background: rgba(0,0,0,0.7);
+            border: 6px solid var(--primary);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .chat-header {
+            background: #111;
+            padding: 12px;
+            font-size: 1rem;
+            border-bottom: 4px solid var(--primary);
+        }
+        
+        .chat-messages {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 0.8rem;
+            text-align: left;
+        }
+        
+        .chat-message {
+            padding: 10px 14px;
+            border-radius: 12px;
+            max-width: 85%;
+            word-break: break-word;
+        }
+        
+        .chat-message.self {
+            background: #00ff9d;
+            color: #111;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        
+        .chat-message.opponent {
+            background: #ff00aa;
+            color: #fff;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        
+        .chat-input {
+            padding: 12px;
+            display: flex;
+            gap: 8px;
+            background: #111;
+        }
+        
+        .chat-input input {
+            flex: 1;
+            padding: 12px;
+            font-family: 'Press Start 2P', system-ui;
+            font-size: 0.85rem;
+            border: 4px solid #222;
+            background: #fff;
+            color: #111;
+            border-radius: 8px;
+        }
+        
+        .chat-input button {
+            font-family: 'Press Start 2P', system-ui;
+            background: var(--primary);
+            color: #111;
+            border: 4px solid #222;
+            padding: 0 24px;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+        
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            font-family: 'Press Start 2P', system-ui;
+            padding: 14px 20px;
+            font-size: 0.85rem;
+            background: #ff00aa;
+            color: white;
+            border: 4px solid #222;
+            box-shadow: 0 6px 0 #222;
+            cursor: pointer;
+            border-radius: 8px;
+        }
+        
+        button:hover { box-shadow: 0 9px 0 #222; transform: translateY(-2px); }
+        
+        .turn-indicator {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ff0;
+            color: #111;
+            padding: 4px 20px;
+            font-size: 0.75rem;
+            border-radius: 9999px;
+            box-shadow: 0 0 15px #ff0;
+            white-space: nowrap;
+            animation: pulse 2s infinite;
+        }
+        
+        .footer {
+            padding: 12px;
+            font-size: 0.7rem;
+            background: rgba(0,0,0,0.8);
+            color: #666;
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .modal-content {
+            background: #111;
+            border: 8px solid var(--primary);
+            padding: 40px;
+            max-width: 420px;
+            text-align: center;
+            border-radius: 16px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="player-label" style="background:#ff2d55;color:white;">PLAYER 1 (RED)</div>
+        <h1>FALSE_FLAG</h1>
+        <div class="player-label" style="background:#00d4ff;color:#111;">PLAYER 2 (BLUE)</div>
+    </header>
+    
+    <main>
+        <!-- PLAYER 1 AREA -->
+        <div class="player-area red" id="player1-area">
+            <div class="turn-indicator" id="turn-p1" style="display:none;">YOUR TURN!</div>
+            <div class="player-header">
+                <strong>YOUR BOARD - Your Secret Flag</strong>
+                <span id="p1-remaining" style="color:#ff2d55;">24 LEFT</span>
+            </div>
+            
+            <div class="secret-slot" id="p1-secret">
+                <div class="secret-label">YOUR MYSTERY FLAG (HIDDEN FROM OPPONENT)</div>
+                <img id="p1-secret-img" src="" alt="">
+                <p id="p1-secret-name" style="margin-top:8px;color:#ff2d55;font-size:0.85rem;"></p>
+            </div>
+            
+            <div id="p1-grid" class="grid"></div>
+            
+            <div class="controls">
+                <button onclick="p1Guess()">GUESS OPPONENT'S FLAG</button>
+                <button onclick="endTurn(1)" id="p1-end-turn-btn">END TURN (NO GUESS)</button>
+            </div>
+        </div>
+        
+        <!-- CHAT / CENTER -->
+        <div class="chat-container">
+            <div class="chat-header">
+                LIVE CHAT - YES/NO QUESTIONS ONLY<br>
+                <small>Alternate turns - Ask about opponent's secret flag</small>
+            </div>
+            
+            <div id="chat-messages" class="chat-messages"></div>
+            
+            <div class="chat-input">
+                <input type="text" id="chat-input" placeholder="Ask a yes/no question..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+                <button onclick="sendChatMessage()">SEND</button>
+            </div>
+            
+            <div style="padding:8px 12px;background:#222;font-size:0.7rem;text-align:center;">
+                Current Turn: <strong id="current-turn-display">PLAYER 1</strong>
+            </div>
+            
+            <div style="display:flex;gap:6px;padding:8px;justify-content:center;background:#111;">
+                <button onclick="answerYes()" style="background:#00ff9d;color:#111;flex:1">YES</button>
+                <button onclick="answerNo()" style="background:#ff00aa;color:white;flex:1">NO</button>
+            </div>
+        </div>
+        
+        <!-- PLAYER 2 AREA -->
+        <div class="player-area blue" id="player2-area">
+            <div class="turn-indicator" id="turn-p2" style="display:none;">YOUR TURN!</div>
+            <div class="player-header">
+                <strong>YOUR BOARD - Your Secret Flag</strong>
+                <span id="p2-remaining" style="color:#00d4ff;">24 LEFT</span>
+            </div>
+            
+            <div class="secret-slot" id="p2-secret">
+                <div class="secret-label">YOUR MYSTERY FLAG (HIDDEN FROM OPPONENT)</div>
+                <img id="p2-secret-img" src="" alt="">
+                <p id="p2-secret-name" style="margin-top:8px;color:#00d4ff;font-size:0.85rem;"></p>
+            </div>
+            
+            <div id="p2-grid" class="grid"></div>
+            
+            <div class="controls">
+                <button onclick="p2Guess()">GUESS OPPONENT'S FLAG</button>
+                <button onclick="endTurn(2)" id="p2-end-turn-btn">END TURN (NO GUESS)</button>
+            </div>
+        </div>
+    </main>
+    
+    <div class="footer">
+        FALSE_FLAG - Exact Guess Who rules adapted for flags - Hotseat 2-player demo (same device) - 
+        <strong>Next step:</strong> Real-time online multiplayer with Socket.io (code included in comments)
+    </div>
+    
+    <!-- GUESS MODAL -->
+    <div class="modal" id="guess-modal">
+        <div class="modal-content">
+            <h2 id="modal-title">GUESS THE OPPONENT'S FLAG</h2>
+            <select id="guess-select" style="width:100%;padding:14px;font-size:1rem;margin:20px 0;font-family:'Press Start 2P';"></select>
+            <div style="display:flex;gap:15px">
+                <button onclick="submitGuess()" style="flex:1;background:#00ff9d">SUBMIT GUESS</button>
+                <button onclick="closeModal()" style="flex:1;background:#666">CANCEL</button>
+            </div>
+            <small style="margin-top:20px;display:block;color:#aaa;">Wrong guess = instant loss (per official rules)</small>
+        </div>
+    </div>
+    
+    <script>
+        // 24 country flags (same list both players see)
+        const COUNTRIES = [
+            { code: 'ar', name: 'Argentina' }, { code: 'au', name: 'Australia' },
+            { code: 'br', name: 'Brazil' }, { code: 'ca', name: 'Canada' },
+            { code: 'cn', name: 'China' }, { code: 'fr', name: 'France' },
+            { code: 'de', name: 'Germany' }, { code: 'in', name: 'India' },
+            { code: 'it', name: 'Italy' }, { code: 'jp', name: 'Japan' },
+            { code: 'mx', name: 'Mexico' }, { code: 'ru', name: 'Russia' },
+            { code: 'za', name: 'South Africa' }, { code: 'es', name: 'Spain' },
+            { code: 'gb', name: 'United Kingdom' }, { code: 'us', name: 'United States' },
+            { code: 'eg', name: 'Egypt' }, { code: 'ke', name: 'Kenya' },
+            { code: 'ng', name: 'Nigeria' }, { code: 'tr', name: 'Turkey' },
+            { code: 'ir', name: 'Iran' }, { code: 'sa', name: 'Saudi Arabia' },
+            { code: 'kr', name: 'South Korea' }, { code: 'id', name: 'Indonesia' }
+        ];
+
+        let gameState = {
+            p1Secret: null,
+            p2Secret: null,
+            p1Eliminated: new Set(),
+            p2Eliminated: new Set(),
+            currentTurn: 1, // 1 or 2
+            chatLog: [],
+            lastQuestion: null
+        };
+
+        // Render a single player's grid
+        function renderGrid(player) {
+            const gridId = player === 1 ? 'p1-grid' : 'p2-grid';
+            const eliminatedSet = player === 1 ? gameState.p1Eliminated : gameState.p2Eliminated;
+            const grid = document.getElementById(gridId);
+            grid.innerHTML = '';
+            
+            COUNTRIES.forEach(country => {
+                const isElim = eliminatedSet.has(country.code);
+                const card = document.createElement('div');
+                card.className = `card ${isElim ? 'eliminated' : ''}`;
+                card.innerHTML = `
+                    <img src="https://flagcdn.com/w320/${country.code}.png" alt="${country.name}">
+                    <p>${country.name}</p>
+                `;
+                
+                card.addEventListener('click', () => {
+                    if (gameState.currentTurn !== player) {
+                        alert("It's not your turn!");
+                        return;
+                    }
+                    if (isElim) {
+                        eliminatedSet.delete(country.code);
+                    } else {
+                        eliminatedSet.add(country.code);
+                    }
+                    renderGrid(player);
+                    updateRemaining(player);
+                });
+                
+                grid.appendChild(card);
+            });
+        }
+
+        function updateRemaining(player) {
+            const count = COUNTRIES.length - (player === 1 ? gameState.p1Eliminated.size : gameState.p2Eliminated.size);
+            document.getElementById(`p${player}-remaining`).textContent = `${count} LEFT`;
+        }
+
+        function renderSecret(player) {
+            const secret = player === 1 ? gameState.p1Secret : gameState.p2Secret;
+            const img = document.getElementById(`p${player}-secret-img`);
+            const nameEl = document.getElementById(`p${player}-secret-name`);
+            img.src = `https://flagcdn.com/w320/${secret.code}.png`;
+            nameEl.textContent = secret.name;
+        }
+
+        function addChatMessage(text, sender) {
+            const container = document.getElementById('chat-messages');
+            const msg = document.createElement('div');
+            msg.className = `chat-message ${sender}`;
+            msg.textContent = text;
+            container.appendChild(msg);
+            container.scrollTop = container.scrollHeight;
+            gameState.chatLog.push({ text, sender });
+        }
+
+        function sendChatMessage() {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            
+            const currentPlayer = gameState.currentTurn;
+            
+            // Only allow questions on your turn
+            if (text.toLowerCase().includes('?') === false) {
+                alert("Questions must end with a ? (yes/no only - per Guess Who rules)");
+                return;
+            }
+            
+            addChatMessage(`P${currentPlayer}: ${text}`, currentPlayer === 1 ? 'self' : 'opponent');
+            gameState.lastQuestion = text;
+            input.value = '';
+            
+            // In real multiplayer this would be sent via Socket.io
+            // Here we just wait for the opponent to answer via the YES/NO buttons
+        }
+
+        function answerYes() {
+            if (!gameState.lastQuestion) return;
+            const currentPlayer = gameState.currentTurn;
+            addChatMessage(`P${currentPlayer === 1 ? 2 : 1} answers: YES`, 'opponent');
+            gameState.lastQuestion = null;
+            // Turn does NOT automatically pass - asker eliminates then ends turn manually
+        }
+
+        function answerNo() {
+            if (!gameState.lastQuestion) return;
+            const currentPlayer = gameState.currentTurn;
+            addChatMessage(`P${currentPlayer === 1 ? 2 : 1} answers: NO`, 'opponent');
+            gameState.lastQuestion = null;
+        }
+
+        function endTurn(player) {
+            if (gameState.currentTurn !== player) return;
+            gameState.currentTurn = player === 1 ? 2 : 1;
+            updateTurnUI();
+        }
+
+        function updateTurnUI() {
+            document.getElementById('turn-p1').style.display = gameState.currentTurn === 1 ? 'block' : 'none';
+            document.getElementById('turn-p2').style.display = gameState.currentTurn === 2 ? 'block' : 'none';
+            document.getElementById('current-turn-display').textContent = `PLAYER ${gameState.currentTurn}`;
+            
+            // Disable end-turn buttons for non-active player
+            document.getElementById('p1-end-turn-btn').disabled = gameState.currentTurn !== 1;
+            document.getElementById('p2-end-turn-btn').disabled = gameState.currentTurn !== 2;
+        }
+
+        function p1Guess() {
+            if (gameState.currentTurn !== 1) {
+                alert("Not your turn!");
+                return;
+            }
+            showGuessModal(1);
+        }
+
+        function p2Guess() {
+            if (gameState.currentTurn !== 2) {
+                alert("Not your turn!");
+                return;
+            }
+            showGuessModal(2);
+        }
+
+        function showGuessModal(player) {
+            const modal = document.getElementById('guess-modal');
+            const select = document.getElementById('guess-select');
+            const opponentSecret = player === 1 ? gameState.p2Secret : gameState.p1Secret;
+            
+            select.innerHTML = `<option value="">â€” select flag â€”</option>`;
+            
+            COUNTRIES.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.code;
+                opt.textContent = c.name;
+                select.appendChild(opt);
+            });
+            
+            modal.style.display = 'flex';
+            modal.dataset.guessingPlayer = player;
+        }
+
+        function closeModal() {
+            document.getElementById('guess-modal').style.display = 'none';
+        }
+
+        function submitGuess() {
+            const modal = document.getElementById('guess-modal');
+            const player = parseInt(modal.dataset.guessingPlayer);
+            const selectedCode = document.getElementById('guess-select').value;
+            
+            if (!selectedCode) {
+                alert("Choose a flag!");
+                return;
+            }
+            
+            const opponentSecretCode = player === 1 ? gameState.p2Secret.code : gameState.p1Secret.code;
+            
+            if (selectedCode === opponentSecretCode) {
+                alert(`PLAYER ${player} WINS!\n\nYou correctly guessed the opponent's mystery flag!`);
+                // Reset for new game
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                alert(`WRONG GUESS!\n\nPer official Guess Who rules you lose immediately.`);
+                setTimeout(() => location.reload(), 1500);
+            }
+            
+            closeModal();
+        }
+
+        // Initialize full 2-player hotseat game
+        function initGame() {
+            // Pick unique secret flags for each player (just like shuffling mystery cards)
+            let shuffled = [...COUNTRIES].sort(() => Math.random() - 0.5);
+            gameState.p1Secret = shuffled[0];
+            gameState.p2Secret = shuffled[1];
+            
+            renderSecret(1);
+            renderSecret(2);
+            
+            renderGrid(1);
+            renderGrid(2);
+            
+            updateRemaining(1);
+            updateRemaining(2);
+            
+            updateTurnUI();
+            
+            // Welcome message
+            addChatMessage("Welcome to FALSE_FLAG", 'opponent');
+            addChatMessage("Player 1 (RED) goes first - ask a yes/no question in the chat!", 'self');
+            
+            console.log('%cFALSE_FLAG Multiplayer Hotseat Ready!', 'color:#00ff9d;font-size:18px');
+            console.log('P1 secret:', gameState.p1Secret.name);
+            console.log('P2 secret:', gameState.p2Secret.name);
+            console.log('Follow exact Guess Who rules: ask in chat -> opponent answers YES/NO -> eliminate on YOUR board only -> guess on your turn');
+        }
+        
+        // ================================================
+        // NEXT STEP: REAL-TIME MULTIPLAYER (Socket.io)
+        // ================================================
+        // 1. Save this HTML as index.html
+        // 2. Create a simple Node.js server (see comment below)
+        // 3. Replace hotseat logic with Socket.io events:
+        //    - 'join-game', 'ask-question', 'answer-question', 'eliminate-flag', 'make-guess', 'game-over'
+        // 4. Each player only receives updates to their own board + chat
+        // 5. Secrets stay server-side and private
+        
+        /* 
+        // Minimal Node.js + Socket.io server (run with: npm i express socket.io && node server.js)
+        const express = require('express');
+        const http = require('http');
+        const { Server } = require('socket.io');
+        const app = express();
+        const server = http.createServer(app);
+        const io = new Server(server);
+        
+        let rooms = {};
+        
+        io.on('connection', (socket) => {
+            // ... full real-time matchmaking + private per-player boards
+            console.log('Player connected - ready for real online FALSE_FLAG');
+        });
+        
+        server.listen(3000);
+        */
+        
+        window.onload = initGame;
+    </script>
+</body>
+</html>

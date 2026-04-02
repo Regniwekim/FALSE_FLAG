@@ -1,0 +1,83 @@
+import { randomUUID } from "node:crypto";
+import type { RoomState } from "./types.js";
+
+const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateRoomCode(): string {
+  return Array.from({ length: 6 }, () => ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)]).join("");
+}
+
+export class RoomManager {
+  private rooms = new Map<string, RoomState>();
+
+  createRoom(socketId: string, displayName = "Player 1") {
+    let roomCode = generateRoomCode();
+    while (this.rooms.has(roomCode)) {
+      roomCode = generateRoomCode();
+    }
+
+    const playerId = randomUUID();
+    const room: RoomState = {
+      roomCode,
+      status: "waiting",
+      players: [
+        {
+          playerId,
+          socketId,
+          seat: "p1",
+          displayName,
+          secretFlagCode: null,
+          eliminatedFlagCodes: []
+        }
+      ],
+      championship: {
+        targetWins: 3,
+        winsByPlayerId: { [playerId]: 0 },
+        roundsPlayed: 0,
+        matchWinnerPlayerId: null
+      },
+      round: null,
+      chatLog: []
+    };
+
+    this.rooms.set(roomCode, room);
+    return { room, player: room.players[0] };
+  }
+
+  joinRoom(roomCode: string, socketId: string, displayName = "Player 2") {
+    const room = this.rooms.get(roomCode);
+    if (!room) {
+      return { error: "ROOM_NOT_FOUND" as const };
+    }
+    if (room.players.length >= 2) {
+      return { error: "ROOM_FULL" as const };
+    }
+
+    const playerId = randomUUID();
+    const player = {
+      playerId,
+      socketId,
+      seat: "p2" as const,
+      displayName,
+      secretFlagCode: null,
+      eliminatedFlagCodes: []
+    };
+
+    room.players.push(player);
+    room.championship.winsByPlayerId[playerId] = 0;
+    return { room, player };
+  }
+
+  getRoom(roomCode: string) {
+    return this.rooms.get(roomCode);
+  }
+
+  findPlayerRoom(socketId: string) {
+    for (const room of this.rooms.values()) {
+      if (room.players.some((player) => player.socketId === socketId)) {
+        return room;
+      }
+    }
+    return null;
+  }
+}
