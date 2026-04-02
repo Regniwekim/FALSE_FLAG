@@ -7,7 +7,7 @@ services:
     autoDeployTrigger: commit
     previews:
       generation: manual
-    buildCommand: npm ci && npm run build -w shared && npm run build -w backend
+    buildCommand: npm ci --include=dev && npm run build -w shared && npm run build -w backend
     startCommand: node backend/dist/server.js
     healthCheckPath: /health
     buildFilter:
@@ -34,7 +34,7 @@ services:
     autoDeployTrigger: commit
     previews:
       generation: manual
-    buildCommand: npm ci && npm run build -w shared && npm run build -w frontend
+    buildCommand: npm ci --include=dev && npm run build -w shared && npm run build -w frontend
     staticPublishPath: frontend/dist
     buildFilter:
       paths:
