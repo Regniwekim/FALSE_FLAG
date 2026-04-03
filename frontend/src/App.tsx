@@ -22,13 +22,22 @@ import {
   playTurnChange,
   playRoundOver,
   playCorrectGuess,
-  playWrongGuess
+  playWrongGuess,
+  playButtonClick
 } from "./audio";
 import { WORLD_MAP_MARKER_POSITIONS, type FlagMarkerPositions } from "./world-map-marker-positions";
 
 type LobbyState = {
   roomCodeInput: string;
   displayName: string;
+};
+
+type ToastTone = "info" | "success" | "warning" | "error";
+
+type ToastMessage = {
+  id: number;
+  text: string;
+  tone: ToastTone;
 };
 
 const DEFAULT_FLAG_CODES = [...FULL_FLAG_CATALOG.slice(0, 24)];
@@ -158,7 +167,7 @@ export function App() {
   const [questionInput, setQuestionInput] = useState("");
   const [chatInput, setChatInput] = useState("");
   const [incomingQuestion, setIncomingQuestion] = useState<string | null>(null);
-  const [lastAnswered, setLastAnswered] = useState<string | null>(null);
+  const [lastAnswered, setLastAnswered] = useState<QuestionAnsweredPayload | null>(null);
   const [eliminatedCodes, setEliminatedCodes] = useState<string[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessageEventPayload[]>([]);
   const [roundResult, setRoundResult] = useState<RoundOverPayload | null>(null);
@@ -170,6 +179,10 @@ export function App() {
   const [isGuessModalOpen, setIsGuessModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
+  const [pendingQuestionText, setPendingQuestionText] = useState<string | null>(null);
+  const [pendingGuessCode, setPendingGuessCode] = useState<string | null>(null);
+  const [recentlyConfirmedFlagCode, setRecentlyConfirmedFlagCode] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -185,10 +198,46 @@ export function App() {
   const panStartRef = useRef({ x: 0, y: 0 });
   const pinchDistanceRef = useRef<number | null>(null);
   const inviteStatusTimerRef = useRef<number | null>(null);
+  const toastTimersRef = useRef<number[]>([]);
+  const feedbackResetTimerRef = useRef<number | null>(null);
+  const toastIdRef = useRef(0);
+  const playerIdRef = useRef<string | null>(null);
+  const pendingQuestionRef = useRef<string | null>(null);
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const pendingViewportStateRef = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
   const viewportFrameRef = useRef<number | null>(null);
+
+  const triggerHaptic = (pattern: number | number[]) => {
+    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+      return;
+    }
+
+    navigator.vibrate(pattern);
+  };
+
+  const pushToast = (text: string, tone: ToastTone = "info") => {
+    const id = toastIdRef.current + 1;
+    toastIdRef.current = id;
+    setToastMessages((messages) => [...messages.slice(-3), { id, text, tone }]);
+
+    const timer = window.setTimeout(() => {
+      setToastMessages((messages) => messages.filter((message) => message.id !== id));
+      toastTimersRef.current = toastTimersRef.current.filter((activeTimer) => activeTimer !== timer);
+    }, 2600);
+
+    toastTimersRef.current.push(timer);
+  };
+
+  const pulseConfirmedFlag = (flagCode: string) => {
+    setRecentlyConfirmedFlagCode(flagCode);
+    if (feedbackResetTimerRef.current) {
+      window.clearTimeout(feedbackResetTimerRef.current);
+    }
+    feedbackResetTimerRef.current = window.setTimeout(() => {
+      setRecentlyConfirmedFlagCode(null);
+    }, 1100);
+  };
 
   const patchGameInfo = (patch: Partial<GameStartedPayload>) => {
     setGameInfo((current) => (current ? { ...current, ...patch } : current));
@@ -260,8 +309,22 @@ export function App() {
       if (guessPickerTypeaheadTimerRef.current) {
         window.clearTimeout(guessPickerTypeaheadTimerRef.current);
       }
+      if (feedbackResetTimerRef.current) {
+        window.clearTimeout(feedbackResetTimerRef.current);
+      }
+      for (const timer of toastTimersRef.current) {
+        window.clearTimeout(timer);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    playerIdRef.current = playerId;
+  }, [playerId]);
+
+  useEffect(() => {
+    pendingQuestionRef.current = pendingQuestionText;
+  }, [pendingQuestionText]);
 
   useEffect(() => {
     socket.connect();
@@ -269,11 +332,13 @@ export function App() {
     const onConnect = () => {
       setConnected(true);
       setStatus("Connected to server");
+      pushToast("Uplink restored.", "success");
     };
 
     const onDisconnect = () => {
       setConnected(false);
       setStatus("Disconnected");
+      pushToast("Signal dropped. Re-establishing uplink.", "warning");
     };
 
     const onConnectError = () => {
@@ -286,6 +351,7 @@ export function App() {
 
     const onReconnectFailed = () => {
       setStatus("Unable to reconnect to server.");
+      pushToast("Reconnect failed. Refresh or create a new room.", "error");
     };
 
     const manager = socket.io;
@@ -302,6 +368,7 @@ export function App() {
       setRoomCode(payload.roomCode);
       setRoomDifficulty(payload.difficulty);
       setStatus(`Room ${payload.roomCode} created. Waiting for opponent.`);
+      pushToast(`Room ${payload.roomCode} is live. Waiting for rival.`, "success");
     });
 
     socket.on(SERVER_TO_CLIENT.ROOM_JOINED, (payload: RoomCreatedPayload) => {
@@ -310,6 +377,7 @@ export function App() {
       setRoomCode(payload.roomCode);
       setRoomDifficulty(payload.difficulty);
       setStatus(`Joined room ${payload.roomCode}. Starting game...`);
+      pushToast(`Joined room ${payload.roomCode}. Syncing mission.`, "success");
     });
 
     socket.on(SERVER_TO_CLIENT.GAME_STARTED, (payload: GameStartedPayload) => {
@@ -322,8 +390,12 @@ export function App() {
       setMatchWinnerId(null);
       setIsRoundTransitioning(false);
       setIsGuessModalOpen(false);
+      setPendingQuestionText(null);
+      setPendingGuessCode(null);
+      setRecentlyConfirmedFlagCode(null);
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("Game started");
+      pushToast(`Round ${payload.roundNumber} is live.`, "success");
     });
 
     socket.on(SERVER_TO_CLIENT.NEW_GAME_STARTED, (payload: GameStartedPayload) => {
@@ -337,31 +409,61 @@ export function App() {
       setMatchWinnerId(null);
       setIsRoundTransitioning(false);
       setIsGuessModalOpen(false);
+      setPendingQuestionText(null);
+      setPendingGuessCode(null);
+      setRecentlyConfirmedFlagCode(null);
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("New game started");
+      pushToast("Rematch deployed. New intel assigned.", "success");
     });
 
     socket.on(SERVER_TO_CLIENT.TURN_STATE_CHANGED, (payload: { state: TurnState }) => {
       setTurnState(payload.state);
+      if (payload.state === "awaiting-answer" && pendingQuestionRef.current) {
+        pushToast("Question delivered. Awaiting answer.", "success");
+        setPendingQuestionText(null);
+      }
     });
 
     socket.on(SERVER_TO_CLIENT.TURN_ENDED, (payload: { nextActivePlayerId: string }) => {
       patchGameInfo({ activePlayerId: payload.nextActivePlayerId });
       playTurnChange();
+      if (payload.nextActivePlayerId === playerIdRef.current) {
+        pushToast("Your turn begins.", "success");
+        triggerHaptic(20);
+      } else {
+        pushToast("Turn handed to opponent.", "info");
+      }
     });
 
     socket.on(SERVER_TO_CLIENT.INCOMING_QUESTION, (payload: IncomingQuestionPayload) => {
       setIncomingQuestion(payload.question);
       playIncomingQuestion();
+      pushToast("Incoming interrogation.", "warning");
+      triggerHaptic([18, 30, 18]);
     });
 
     socket.on(SERVER_TO_CLIENT.QUESTION_ANSWERED, (payload: QuestionAnsweredPayload) => {
-      setLastAnswered(`${payload.question} -> ${payload.answer.toUpperCase()}`);
+      setLastAnswered(payload);
       setIncomingQuestion(null);
+      if (payload.answeredByPlayerId === playerIdRef.current) {
+        pushToast(`Answer sent: ${payload.answer.toUpperCase()}.`, "success");
+      } else {
+        pushToast(`Answer received: ${payload.answer.toUpperCase()}.`, "success");
+      }
     });
 
     socket.on(SERVER_TO_CLIENT.BOARD_UPDATED, (payload: BoardUpdatedPayload) => {
-      setEliminatedCodes(payload.eliminatedFlagCodes);
+      setEliminatedCodes((previousCodes) => {
+        const nextCodes = payload.eliminatedFlagCodes;
+        const addedCode = nextCodes.find((flagCode) => !previousCodes.includes(flagCode)) ?? null;
+        if (addedCode) {
+          pulseConfirmedFlag(addedCode);
+          pushToast(`${addedCode.toUpperCase()} eliminated from your board.`, "success");
+          triggerHaptic(14);
+        }
+        return nextCodes;
+      });
     });
 
     socket.on(SERVER_TO_CLIENT.CHAT_MESSAGE, (payload: ChatMessageEventPayload) => {
@@ -385,12 +487,19 @@ export function App() {
       setTurnState("round-over");
       setIsRoundTransitioning(true);
       setIsGuessModalOpen(false);
+      setPendingQuestionText(null);
+      setPendingGuessCode(null);
       setStatus(`Round over: ${payload.reason}`);
       playRoundOver();
       if (payload.reason === "correct-guess") {
         setTimeout(playCorrectGuess, 300);
       } else {
         setTimeout(playWrongGuess, 300);
+      }
+      if (payload.winnerPlayerId === playerIdRef.current) {
+        pushToast(payload.reason === "correct-guess" ? "Round secured with a correct guess." : "Opponent guessed wrong. Round secured.", "success");
+      } else {
+        pushToast(payload.reason === "wrong-guess" ? "Wrong guess. Round lost." : "Opponent identified your flag.", "error");
       }
     });
 
@@ -402,10 +511,15 @@ export function App() {
       setMatchWinnerId(payload.winnerPlayerId ?? null);
       setIsRoundTransitioning(false);
       setStatus("Match over");
+      pushToast(
+        payload.winnerPlayerId === playerIdRef.current ? "Championship secured." : "Opponent secured the match.",
+        payload.winnerPlayerId === playerIdRef.current ? "success" : "warning"
+      );
     });
 
     socket.on(SERVER_TO_CLIENT.ACTION_ERROR, (payload: ActionErrorPayload) => {
       setStatus(`Error: ${payload.code} - ${payload.message}`);
+      pushToast(payload.message, "error");
     });
 
     return () => {
@@ -432,6 +546,8 @@ export function App() {
   }, [roomCode]);
 
   const createRoom = () => {
+    playButtonClick();
+    pushToast("Creating room...", "info");
     socket.emit(CLIENT_TO_SERVER.CREATE_ROOM, {
       displayName: lobby.displayName || undefined,
       difficulty: selectedDifficulty
@@ -439,6 +555,8 @@ export function App() {
   };
 
   const joinRoom = () => {
+    playButtonClick();
+    pushToast(`Joining room ${lobby.roomCodeInput.trim().toUpperCase()}...`, "info");
     socket.emit(CLIENT_TO_SERVER.JOIN_ROOM, {
       roomCode: lobby.roomCodeInput.trim().toUpperCase(),
       displayName: lobby.displayName || undefined
@@ -618,7 +736,11 @@ export function App() {
     if (!canAsk || !questionInput.trim()) {
       return;
     }
-    socket.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: questionInput.trim() });
+    const trimmedQuestion = questionInput.trim();
+    playButtonClick();
+    setPendingQuestionText(trimmedQuestion);
+    pushToast("Question uplinked.", "info");
+    socket.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: trimmedQuestion });
     setQuestionInput("");
   };
 
@@ -626,6 +748,9 @@ export function App() {
     if (!canAnswer) {
       return;
     }
+    playButtonClick();
+    pushToast(`Answering ${answer.toUpperCase()}...`, "info");
+    triggerHaptic(12);
     socket.emit(CLIENT_TO_SERVER.ANSWER_QUESTION, { answer });
   };
 
@@ -633,6 +758,8 @@ export function App() {
     if (!canEliminate) {
       return;
     }
+    playButtonClick();
+    triggerHaptic(10);
     socket.emit(CLIENT_TO_SERVER.ELIMINATE_FLAG, { flagCode });
   };
 
@@ -640,6 +767,8 @@ export function App() {
     if (!canEndTurn) {
       return;
     }
+    playButtonClick();
+    pushToast("Ending turn...", "info");
     socket.emit(CLIENT_TO_SERVER.END_TURN, {});
   };
 
@@ -647,7 +776,10 @@ export function App() {
     if (!chatInput.trim()) {
       return;
     }
-    socket.emit(CLIENT_TO_SERVER.CHAT_MESSAGE, { text: chatInput.trim() });
+    const trimmedChat = chatInput.trim();
+    playButtonClick();
+    pushToast("Transmitting chat...", "info");
+    socket.emit(CLIENT_TO_SERVER.CHAT_MESSAGE, { text: trimmedChat });
     setChatInput("");
   };
 
@@ -660,11 +792,16 @@ export function App() {
     if (!canGuess) {
       return;
     }
+    playButtonClick();
+    setPendingGuessCode(guessFlagCode);
+    pushToast(`Guess locked: ${guessFlagCode.toUpperCase()}.`, "warning");
+    triggerHaptic([16, 40, 16]);
     socket.emit(CLIENT_TO_SERVER.MAKE_GUESS, { guessedFlagCode: guessFlagCode });
     closeGuessModal();
   };
 
   const startNewGame = () => {
+    playButtonClick();
     socket.emit(CLIENT_TO_SERVER.NEW_GAME, {});
   };
 
@@ -672,6 +809,7 @@ export function App() {
     if (!canGuess) {
       return;
     }
+    playButtonClick();
     setIsGuessPickerOpen(false);
     setIsGuessModalOpen(true);
   };
@@ -681,6 +819,7 @@ export function App() {
   };
 
   const openRulesModal = () => {
+    playButtonClick();
     setIsRulesModalOpen(true);
   };
 
@@ -692,6 +831,8 @@ export function App() {
     if (!inviteLink) {
       return;
     }
+
+    playButtonClick();
 
     const updateInviteStatus = (message: string) => {
       setInviteStatus(message);
@@ -707,6 +848,7 @@ export function App() {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(inviteLink);
         updateInviteStatus("Invite copied");
+        pushToast("Invite link copied.", "success");
         return;
       }
 
@@ -720,8 +862,10 @@ export function App() {
       document.execCommand("copy");
       helper.remove();
       updateInviteStatus("Invite copied");
+      pushToast("Invite link copied.", "success");
     } catch {
       updateInviteStatus("Copy failed");
+      pushToast("Copy failed.", "error");
     }
   };
 
@@ -1008,10 +1152,20 @@ export function App() {
         : "OPPONENT TURN";
   const turnBannerClassName = isYourTurn ? "turn-banner turn-banner-active" : "turn-banner";
   const currentMissionLabel = roomCode ? `operation-${roomCode.toLowerCase()}` : "operation-pending";
+  const heroPanelClassName = connected
+    ? /Reconnecting|Unable/.test(status)
+      ? "panel panel-wide hero-panel hero-panel-warning"
+      : "panel panel-wide hero-panel"
+    : "panel panel-wide hero-panel hero-panel-offline";
+  const resultCardClassName = roundResult
+    ? roundResult.winnerPlayerId === playerId
+      ? "result-card result-card-success"
+      : "result-card result-card-danger"
+    : "result-card";
 
   return (
     <main className="app-shell">
-      <header className="panel panel-wide hero-panel">
+      <header className={heroPanelClassName}>
         <div>
           <p className="eyebrow">Week 3 Build In Progress</p>
           <h1>.FALSE_FLAG//Global Signal</h1>
@@ -1033,6 +1187,14 @@ export function App() {
           </div>
         </div>
       </header>
+
+      {toastMessages.length > 0 ? (
+        <div className="toast-stack" aria-live="polite" aria-relevant="additions text">
+          {toastMessages.map((message) => (
+            <p key={message.id} className={`toast toast-${message.tone}`}>{message.text}</p>
+          ))}
+        </div>
+      ) : null}
 
       <section className="panel panel-wide score-ribbon">
         <article className={seat === "p2" ? "score-card score-card-blue" : "score-card score-card-red"}>
@@ -1124,6 +1286,14 @@ export function App() {
           <p>Eliminated flags: {eliminatedCodes.length}</p>
           <p>Round result: {roundResult ? formatRoundReason(roundResult.reason) : "pending"}</p>
         </div>
+
+        {pendingQuestionText || pendingGuessCode || recentlyConfirmedFlagCode ? (
+          <div className="feedback-chip-row" aria-live="polite">
+            {pendingQuestionText ? <p className="feedback-chip feedback-chip-info">Question in flight</p> : null}
+            {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
+            {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="panel round-panel">
@@ -1163,10 +1333,17 @@ export function App() {
               </div>
             </div>
 
-            {lastAnswered ? <p className="event-strip">Last Q and A: {lastAnswered}</p> : null}
+            {lastAnswered ? (
+              <p className="event-strip">
+                <span>Last Q and A: {lastAnswered.question}</span>
+                <span className={lastAnswered.answer === "yes" ? "answer-badge answer-badge-yes" : "answer-badge answer-badge-no"}>
+                  {lastAnswered.answer.toUpperCase()}
+                </span>
+              </p>
+            ) : null}
 
             {roundResult ? (
-              <div className="result-card">
+              <div className={resultCardClassName}>
                 <p className="result-title">Round result: {formatRoundReason(roundResult.reason)}</p>
                 <p>Your location was {yourSecretReveal?.toUpperCase() ?? "hidden"}.</p>
                 <p>Opponent location was {opponentSecretReveal?.toUpperCase() ?? "hidden"}.</p>
@@ -1200,7 +1377,7 @@ export function App() {
         </div>
 
         {incomingQuestion ? (
-          <div className="incoming-card">
+          <div className="incoming-card incoming-card-alert">
             <p className="incoming-label">Incoming interrogation</p>
             <strong>{incomingQuestion}</strong>
             <div className="controls controls-stack">

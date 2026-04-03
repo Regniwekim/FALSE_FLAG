@@ -104,6 +104,16 @@ describe("App turn/state control gating", () => {
     await waitFor(() => {
       expect(mocked.socket.emits.some((e) => e.event === CLIENT_TO_SERVER.ASK_QUESTION)).toBe(true);
     });
+
+    expect(screen.getByText("Question in flight")).toBeInTheDocument();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, {
+      state: "awaiting-answer"
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Question in flight")).not.toBeInTheDocument();
+    });
   });
 
   it("enables answer buttons for non-active player in awaiting-answer with incoming question", async () => {
@@ -203,6 +213,30 @@ describe("App turn/state control gating", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Rematch" }));
     expect(mocked.socket.emits.some((e) => e.event === CLIENT_TO_SERVER.NEW_GAME)).toBe(true);
+  });
+
+  it("shows answer badge and action errors in the feedback layer", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ANSWERED, {
+      question: "Is it in Europe?",
+      answer: "no",
+      answeredByPlayerId: "p2"
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("NO")).toBeInTheDocument();
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ACTION_ERROR, {
+      code: "INVALID_STATE",
+      message: "No active game room."
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("No active game room.")).toBeInTheDocument();
+    });
   });
 
   it("filters eliminated flags from the guess modal and emits the selected guess", async () => {

@@ -161,6 +161,17 @@ button:disabled {
   gap: 16px;
   overflow: hidden;
   position: relative;
+  transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.hero-panel-warning {
+  border-color: #FFBE0B88;
+  box-shadow: 0 14px 32px #00000055, 0 0 20px #FFBE0B22, inset 0 0 0 1px #FFBE0B22;
+}
+
+.hero-panel-offline {
+  border-color: #FF006E88;
+  box-shadow: 0 14px 32px #00000055, 0 0 20px #FF006E22, inset 0 0 0 1px #FF006E22;
 }
 
 .hero-panel::after {
@@ -274,6 +285,47 @@ button:disabled {
   color: #B0B0FF;
 }
 
+.toast-stack {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(340px, calc(100vw - 28px));
+}
+
+.toast {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid #00F0FF66;
+  background: linear-gradient(180deg, #17102f, #0F0920);
+  color: #e9f6ff;
+  box-shadow: 0 12px 28px #00000066;
+  animation: toast-enter 220ms ease-out;
+}
+
+.toast-info {
+  border-color: #00F0FF77;
+}
+
+.toast-success {
+  border-color: #00F0FF;
+  box-shadow: 0 12px 28px #00000066, 0 0 18px #00F0FF22;
+}
+
+.toast-warning {
+  border-color: #FFBE0B99;
+  box-shadow: 0 12px 28px #00000066, 0 0 18px #FFBE0B22;
+}
+
+.toast-error {
+  border-color: #FF4D6D99;
+  box-shadow: 0 12px 28px #00000066, 0 0 18px #FF4D6D22;
+}
+
 .round-transition-banner {
   margin: 0;
   padding: 8px 12px;
@@ -379,10 +431,21 @@ button:disabled {
 
 .result-card {
   background: #1a0f3a;
+  animation: reveal-rise 260ms ease-out;
 }
 
 .result-card-match {
   background: #3D0B5D;
+}
+
+.result-card-success {
+  border-color: #00F0FF;
+  box-shadow: 0 0 20px #00F0FF26;
+}
+
+.result-card-danger {
+  border-color: #FF4D6D99;
+  box-shadow: 0 0 20px #FF4D6D22;
 }
 
 .result-title,
@@ -397,6 +460,64 @@ button:disabled {
   border-radius: 14px;
   background: #1a0f3a;
   border: 1px solid #00F0FF77;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.answer-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 70px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+}
+
+.answer-badge-yes {
+  background: #00f0ff22;
+  border: 1px solid #00F0FF66;
+  color: #8ff8ff;
+}
+
+.answer-badge-no {
+  background: #ff4d6d22;
+  border: 1px solid #FF4D6D77;
+  color: #ffb3c1;
+}
+
+.feedback-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.feedback-chip {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid #00F0FF55;
+  background: #0F0920;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.feedback-chip-info {
+  border-color: #00F0FF77;
+}
+
+.feedback-chip-success {
+  border-color: #00F0FF;
+  box-shadow: 0 0 14px #00F0FF22;
+}
+
+.feedback-chip-warning {
+  border-color: #FFBE0B99;
+  box-shadow: 0 0 14px #FFBE0B22;
 }
 
 .action-row {
@@ -592,6 +713,10 @@ button:disabled {
   text-decoration: line-through;
   animation: eliminated-pulse 180ms ease-out;
   opacity: 0.58;
+}
+
+.flag-card-eliminated img {
+  filter: saturate(0.5);
 }
 
 .map-flag-card.flag-card-eliminated {
@@ -868,6 +993,47 @@ button:disabled {
   }
 }
 
+@keyframes toast-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes reveal-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes incoming-alert {
+  0% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 #FFBE0B00;
+  }
+
+  50% {
+    transform: scale(1.01);
+    box-shadow: 0 0 22px #FFBE0B33;
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 24px #FFBE0B22;
+  }
+}
+
 @media (max-width: 920px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -887,6 +1053,12 @@ button:disabled {
   }
 }
 
+
+  .incoming-card-alert {
+    border-color: #FFBE0B99;
+    box-shadow: 0 0 24px #FFBE0B22;
+    animation: incoming-alert 520ms ease-out;
+  }
 @media (max-width: 720px) {
   .app-shell {
     padding: 14px;
@@ -956,6 +1128,13 @@ button:disabled {
 
   .guess-modal {
     padding: 16px;
+  }
+
+  .toast-stack {
+    top: auto;
+    right: 14px;
+    bottom: 14px;
+    width: min(100%, calc(100vw - 28px));
   }
 
   .rules-modal-content {
