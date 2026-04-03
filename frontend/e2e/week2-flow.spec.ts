@@ -64,6 +64,10 @@ async function overlapWindow(page: Page, sourceTestId: string, targetTestId: str
   await page.mouse.up();
 }
 
+async function focusWindow(page: Page, testId: string): Promise<void> {
+  await page.getByTestId(testId).locator(".desktop-window-titlebar").click({ force: true });
+}
+
 async function clickFirstUncoveredMarker(page: Page): Promise<string> {
   let label = await findFirstUncoveredMarkerLabel(page);
   if (!label) {
@@ -116,9 +120,9 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await expectRoundNumber(page, 1);
   await expectRoundNumber(page2, 1);
 
-  await expect(page.getByPlaceholder("Ask a yes-or-no question")).toBeEnabled();
-  await page.getByPlaceholder("Ask a yes-or-no question").fill("Is it in Europe?");
-  await page.getByRole("button", { name: "Ask" }).click();
+  await page.getByLabel("Intercept composer").fill("Is it in Europe?");
+  await expect(page.getByRole("button", { name: "Ask Question" })).toBeEnabled();
+  await page.getByRole("button", { name: "Ask Question" }).click();
 
   await expect(page2.getByTestId("incoming-question")).toHaveText(/^Is it in Europe\?$/);
   await expect(page2.getByRole("button", { name: "Answer Yes" })).toBeEnabled();
@@ -127,15 +131,21 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await expect(page.locator(".event-strip")).toContainText("YES");
 
   const eliminableFlagLabel = await clickFirstUncoveredMarker(page);
-  await expect(page.getByRole("button", { name: eliminableFlagLabel })).toHaveClass(/flag-card-eliminated/);
-  await expect(page2.getByRole("button", { name: eliminableFlagLabel })).not.toHaveClass(/flag-card-eliminated/);
+  const localMarker = page.getByTestId("map-canvas").locator(`.map-flag-card[aria-label="${eliminableFlagLabel}"]`).first();
+  const remoteMarker = page2.getByTestId("map-canvas").locator(`.map-flag-card[aria-label="${eliminableFlagLabel}"]`).first();
+  await expect(localMarker).toHaveClass(/flag-card-eliminated/);
+  await expect(remoteMarker).not.toHaveClass(/flag-card-eliminated/);
 
+  await focusWindow(page, "intel-window");
   await expect(page.getByRole("button", { name: "End Turn" })).toBeEnabled();
   await page.getByRole("button", { name: "End Turn" }).click();
 
-  await expect(page2.getByPlaceholder("Ask a yes-or-no question")).toBeEnabled();
+  await focusWindow(page2, "chat-window");
+  await page2.getByLabel("Intercept composer").fill("Can I ask now?");
+  await expect(page2.getByRole("button", { name: "Ask Question" })).toBeEnabled();
 
-  await page.getByPlaceholder("Chat message").fill("hello from p1");
+  await focusWindow(page, "chat-window");
+  await page.getByLabel("Intercept composer").fill("hello from p1");
   await page.getByRole("button", { name: "Send Chat" }).click();
   await expect(page2.getByText(/hello from p1/i)).toBeVisible();
 

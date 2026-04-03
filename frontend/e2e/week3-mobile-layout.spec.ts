@@ -46,9 +46,10 @@ test("week 3 mobile portrait layout stays usable in active match", async ({ brow
   await expect(mapStage).toBeVisible();
   await expect(mobilePage.getByLabel("Map zoom controls")).toBeVisible();
 
-  const chatInput = mobilePage.getByPlaceholder("Chat message");
+  const chatInput = mobilePage.getByLabel("Intercept composer");
   await chatInput.scrollIntoViewIfNeeded();
   await expect(chatInput).toBeVisible();
+  await expect(mobilePage.getByRole("button", { name: "Ask Question" })).toBeVisible();
   await expect(mobilePage.getByRole("button", { name: "Send Chat" })).toBeVisible();
 
   const makeGuessButton = mobilePage.getByRole("button", { name: "Make Guess" });

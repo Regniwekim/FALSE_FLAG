@@ -227,8 +227,7 @@ export function App() {
   const [selectedDifficulty, setSelectedDifficulty] = useState<RoomDifficulty>("easy");
   const [roomDifficulty, setRoomDifficulty] = useState<RoomDifficulty>("easy");
   const [turnState, setTurnState] = useState<TurnState | null>(null);
-  const [questionInput, setQuestionInput] = useState("");
-  const [chatInput, setChatInput] = useState("");
+  const [messageInput, setMessageInput] = useState("");
   const [incomingQuestion, setIncomingQuestion] = useState<string | null>(null);
   const [lastAnswered, setLastAnswered] = useState<QuestionAnsweredPayload | null>(null);
   const [eliminatedCodes, setEliminatedCodes] = useState<string[]>([]);
@@ -250,6 +249,7 @@ export function App() {
   const [recentlyConfirmedFlagCode, setRecentlyConfirmedFlagCode] = useState<string | null>(null);
   const [roundRevealPhase, setRoundRevealPhase] = useState<RoundRevealPhase>("hidden");
   const [scorePulseTarget, setScorePulseTarget] = useState<ScorePulseTarget>(null);
+  const [composerModePreview, setComposerModePreview] = useState<"chat" | "question">("chat");
   const [viewportSize, setViewportSize] = useState<ViewportSize>(initialViewportSize);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState(initialMapPan);
@@ -913,15 +913,15 @@ export function App() {
   }, [chatMessages]);
 
   const askQuestion = () => {
-    if (!canAsk || !questionInput.trim()) {
+    if (!canAsk || !messageInput.trim()) {
       return;
     }
-    const trimmedQuestion = questionInput.trim();
+    const trimmedQuestion = messageInput.trim();
     playButtonClick();
     setPendingQuestionText(trimmedQuestion);
     pushToast("Sending question...", "info");
     socket.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: trimmedQuestion });
-    setQuestionInput("");
+    setMessageInput("");
   };
 
   const answerQuestion = (answer: "yes" | "no") => {
@@ -953,14 +953,14 @@ export function App() {
   };
 
   const sendChat = () => {
-    if (!chatInput.trim()) {
+    if (!messageInput.trim()) {
       return;
     }
-    const trimmedChat = chatInput.trim();
+    const trimmedChat = messageInput.trim();
     playButtonClick();
     pushToast("Transmitting chat...", "info");
     socket.emit(CLIENT_TO_SERVER.CHAT_MESSAGE, { text: trimmedChat });
-    setChatInput("");
+    setMessageInput("");
   };
 
   function closeGuessModal() {
@@ -1392,6 +1392,26 @@ export function App() {
     "result-card-match",
     matchWinnerId === playerId ? "result-card-match-win" : "result-card-match-loss"
   ].join(" ");
+  const chatComposerModeClassName = [
+    "chat-composer-mode-pill",
+    "chat-composer-mode-pill-chat",
+    composerModePreview === "chat" ? "chat-composer-mode-pill-active" : ""
+  ].filter(Boolean).join(" ");
+  const questionComposerModeClassName = [
+    "chat-composer-mode-pill",
+    "chat-composer-mode-pill-question",
+    composerModePreview === "question" ? "chat-composer-mode-pill-active" : ""
+  ].filter(Boolean).join(" ");
+  const chatComposerActionClassName = [
+    "chat-composer-action",
+    "chat-composer-action-chat",
+    composerModePreview === "chat" ? "chat-composer-action-active" : ""
+  ].filter(Boolean).join(" ");
+  const questionComposerActionClassName = [
+    "chat-composer-action",
+    "chat-composer-action-question",
+    composerModePreview === "question" ? "chat-composer-action-active" : ""
+  ].filter(Boolean).join(" ");
   const mapCanvasClassName = isPanning ? "map-stage map-stage-canvas map-stage-panning" : "map-stage map-stage-canvas";
 
   const focusDesktopWindow = useCallback((windowId: DesktopWindowId) => {
@@ -1484,7 +1504,7 @@ export function App() {
 
           <div className="intel-ops-grid">
             <section className="intel-command-panel">
-              <p className="intel-section-label">{matchWinnerId ? "Match Console" : "Question Console"}</p>
+              <p className="intel-section-label">{matchWinnerId ? "Match Console" : "Round Console"}</p>
 
               {lastAnswered ? (
                 <p className="event-strip">
@@ -1501,27 +1521,8 @@ export function App() {
                 <p className="intel-empty-line">Round controls are locked. Use rematch or start a fresh room below.</p>
               ) : (
                 <>
-                  <div className="controls controls-stack intel-question-row">
-                    <input
-                      value={questionInput}
-                      onChange={(event) => setQuestionInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                          event.preventDefault();
-                          askQuestion();
-                        }
-                      }}
-                      placeholder="Ask a yes-or-no question"
-                      disabled={!canAsk}
-                    />
-                    <button onClick={askQuestion} disabled={!canAsk || !questionInput.trim()}>
-                      Ask
-                    </button>
-                  </div>
-
-                  {pendingQuestionText || pendingGuessCode || recentlyConfirmedFlagCode ? (
+                  {pendingGuessCode || recentlyConfirmedFlagCode ? (
                     <div className="feedback-chip-row" aria-live="polite">
-                      {pendingQuestionText ? <p className="feedback-chip feedback-chip-info">Question in flight</p> : null}
                       {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
                       {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
                     </div>
@@ -1610,19 +1611,53 @@ export function App() {
         ))}
       </div>
 
-      <div className="controls controls-stack chat-composer">
-        <input
-          value={chatInput}
-          onChange={(event) => setChatInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              sendChat();
-            }
-          }}
-          placeholder="Chat message"
-        />
-        <button onClick={sendChat} disabled={!chatInput.trim()}>Send Chat</button>
+      <div className="chat-composer">
+        {pendingQuestionText ? (
+          <div className="feedback-chip-row chat-composer-feedback" aria-live="polite">
+            <p className="feedback-chip feedback-chip-info">Question in flight</p>
+          </div>
+        ) : null}
+
+        <div className="chat-composer-main">
+          <div id="intercept-composer-shortcuts" className="chat-composer-modebar">
+            <span className={chatComposerModeClassName}>chat / Enter</span>
+            <span className={questionComposerModeClassName}>question / Ctrl+Enter</span>
+          </div>
+          <input
+            aria-label="Intercept composer"
+            aria-describedby="intercept-composer-shortcuts"
+            value={messageInput}
+            onChange={(event) => setMessageInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Control" || event.key === "Meta") {
+                setComposerModePreview("question");
+                return;
+              }
+
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+
+                if (event.ctrlKey || event.metaKey) {
+                  askQuestion();
+                  return;
+                }
+
+                sendChat();
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === "Control" || event.key === "Meta") {
+                setComposerModePreview("chat");
+              }
+            }}
+            onBlur={() => setComposerModePreview("chat")}
+            placeholder="Type a chat message or yes-or-no question"
+          />
+          <div className="chat-composer-actions">
+            <button className={questionComposerActionClassName} onClick={askQuestion} disabled={!canAsk || !messageInput.trim()}>Ask Question</button>
+            <button className={chatComposerActionClassName} onClick={sendChat} disabled={!messageInput.trim()}>Send Chat</button>
+          </div>
+        </div>
       </div>
     </div>
   );

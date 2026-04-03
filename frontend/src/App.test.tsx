@@ -95,7 +95,7 @@ describe("App turn/state control gating", () => {
       expect(screen.queryByTestId("mission-window")).not.toBeInTheDocument();
       expect(screen.getByTestId("intel-window")).toBeInTheDocument();
       expect(screen.getByTestId("chat-window")).toBeInTheDocument();
-      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).not.toBeDisabled();
+      expect(screen.getByLabelText("Intercept composer")).toBeInTheDocument();
     });
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.MATCH_OVER, { winnerPlayerId: "p1" });
@@ -113,8 +113,11 @@ describe("App turn/state control gating", () => {
 
     startAsPlayerOne();
 
+    const input = await screen.findByLabelText("Intercept composer");
+    fireEvent.change(input, { target: { value: "Is it in Europe?" } });
+
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).not.toBeDisabled();
+      expect(screen.getByRole("button", { name: "Ask Question" })).not.toBeDisabled();
     });
 
     expect(screen.queryByRole("button", { name: "Answer Yes" })).not.toBeInTheDocument();
@@ -125,9 +128,9 @@ describe("App turn/state control gating", () => {
     render(<App />);
     startAsPlayerOne();
 
-    const input = await screen.findByPlaceholderText("Ask a yes-or-no question");
+    const input = await screen.findByLabelText("Intercept composer");
     fireEvent.change(input, { target: { value: "Is it in Europe?" } });
-    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask Question" }));
 
     await waitFor(() => {
       expect(mocked.socket.emits.some((e) => e.event === CLIENT_TO_SERVER.ASK_QUESTION)).toBe(true);
@@ -141,6 +144,47 @@ describe("App turn/state control gating", () => {
 
     await waitFor(() => {
       expect(screen.queryByText("Question in flight")).not.toBeInTheDocument();
+    });
+  });
+
+  it("sends chat on Enter from the shared intercept composer", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const input = await screen.findByLabelText("Intercept composer");
+    fireEvent.change(input, { target: { value: "hello from keyboard" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(
+        mocked.socket.emits.some(
+          (e) => e.event === CLIENT_TO_SERVER.CHAT_MESSAGE && e.payload.text === "hello from keyboard"
+        )
+      ).toBe(true);
+    });
+  });
+
+  it("asks a question on Ctrl+Enter from the shared intercept composer", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const input = await screen.findByLabelText("Intercept composer");
+    fireEvent.keyDown(input, { key: "Control" });
+    fireEvent.change(input, { target: { value: "Is it in Europe?" } });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Ask Question" })).not.toBeDisabled();
+    });
+
+    fireEvent.keyDown(input, { key: "Enter", ctrlKey: true });
+    fireEvent.keyUp(input, { key: "Control" });
+
+    await waitFor(() => {
+      expect(
+        mocked.socket.emits.some(
+          (e) => e.event === CLIENT_TO_SERVER.ASK_QUESTION && e.payload.question === "Is it in Europe?"
+        )
+      ).toBe(true);
     });
   });
 
@@ -176,22 +220,25 @@ describe("App turn/state control gating", () => {
     });
 
     expect(screen.getByRole("button", { name: "Answer No" })).not.toBeDisabled();
-    expect(screen.getByRole("button", { name: "Ask" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Ask Question" })).toBeDisabled();
   });
 
   it("updates active player on turn-ended and disables ask for previous active player", async () => {
     render(<App />);
     startAsPlayerOne();
 
+    const input = await screen.findByLabelText("Intercept composer");
+    fireEvent.change(input, { target: { value: "Is it in Europe?" } });
+
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).not.toBeDisabled();
+      expect(screen.getByRole("button", { name: "Ask Question" })).not.toBeDisabled();
     });
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_ENDED, { nextActivePlayerId: "p2" });
     mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: "awaiting-question" });
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Ask Question" })).toBeDisabled();
     });
   });
 

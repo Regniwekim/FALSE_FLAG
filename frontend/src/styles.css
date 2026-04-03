@@ -823,14 +823,8 @@ button:disabled {
   line-height: 1.35;
 }
 
-.intel-question-row,
 .intel-action-row {
   margin: 0;
-}
-
-.intel-question-row input {
-  flex: 1;
-  min-width: 0;
 }
 
 .intel-action-row button {
@@ -1141,10 +1135,8 @@ button:disabled {
 
 .chat-composer {
   margin-top: 0;
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  gap: 10px;
   position: sticky;
   bottom: 0;
   padding-top: 10px;
@@ -1152,14 +1144,79 @@ button:disabled {
   border-top: 1px solid #00F0FF33;
 }
 
+.chat-composer-feedback {
+  align-items: flex-start;
+}
+
+.chat-composer-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-composer-modebar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chat-composer-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid #00F0FF33;
+  background: rgba(10, 14, 39, 0.72);
+  color: #8fa5c4;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: border-color 120ms ease, box-shadow 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.chat-composer-mode-pill-chat.chat-composer-mode-pill-active {
+  border-color: #00F0FF88;
+  color: #dffcff;
+  background: linear-gradient(180deg, #0f2439, #0F0920);
+  box-shadow: 0 0 18px #00F0FF22;
+}
+
+.chat-composer-mode-pill-question.chat-composer-mode-pill-active {
+  border-color: #FF10F088;
+  color: #fff0fd;
+  background: linear-gradient(180deg, #35104f, #140d30);
+  box-shadow: 0 0 18px #FF10F022;
+}
+
 .chat-composer input {
   flex: 1;
   min-width: 0;
 }
 
+.chat-composer-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .chat-composer button {
-  flex: 0 0 auto;
+  flex: 1;
   white-space: nowrap;
+}
+
+.chat-composer-action-chat {
+  background: linear-gradient(180deg, #102b43, #0F0920);
+  border-color: #00F0FF77;
+}
+
+.chat-composer-action-question {
+  background: linear-gradient(180deg, #4c145f, #1a0f3a);
+  border-color: #FF10F099;
+}
+
+.chat-composer-action-active:not(:disabled) {
+  box-shadow: 0 0 20px #ffffff18;
 }
 
 .modal-scrim {
@@ -1527,8 +1584,11 @@ button:disabled {
   }
 
   .chat-composer {
+    gap: 8px;
+  }
+
+  .chat-composer-actions {
     flex-direction: column;
-    align-items: stretch;
   }
 
   .map-flag-card {
