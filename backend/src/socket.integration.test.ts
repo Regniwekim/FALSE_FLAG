@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   CLIENT_TO_SERVER,
   SERVER_TO_CLIENT,
+  type ChatMessageEventPayload,
   type GameStartedPayload,
   type RoomCreatedPayload,
   type JoinRoomPayload
@@ -62,18 +63,35 @@ describe("Socket integration full turn loop", () => {
     const responder = isP1Active ? p2 : p1;
 
     const incomingQuestionPromise = waitForEvent<{ question: string }>(responder, SERVER_TO_CLIENT.INCOMING_QUESTION);
+    const askerQuestionChatPromise = waitForEvent<ChatMessageEventPayload>(asker, SERVER_TO_CLIENT.CHAT_MESSAGE);
+    const responderQuestionChatPromise = waitForEvent<ChatMessageEventPayload>(responder, SERVER_TO_CLIENT.CHAT_MESSAGE);
     const awaitingAnswerStatePromise = waitForEvent<{ state: string }>(p1, SERVER_TO_CLIENT.TURN_STATE_CHANGED);
     asker.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: "Is your flag in Europe?" });
 
     const incoming = await incomingQuestionPromise;
+    const [askerQuestionChat, responderQuestionChat] = await Promise.all([
+      askerQuestionChatPromise,
+      responderQuestionChatPromise
+    ]);
     expect(incoming.question).toBe("Is your flag in Europe?");
+    expect(askerQuestionChat.text).toBe("Is your flag in Europe?");
+    expect(responderQuestionChat.text).toBe("Is your flag in Europe?");
     expect((await awaitingAnswerStatePromise).state).toBe("awaiting-answer");
 
     const answeredPromise = waitForEvent<{ answer: "yes" | "no" }>(asker, SERVER_TO_CLIENT.QUESTION_ANSWERED);
+    const askerAnswerChatPromise = waitForEvent<ChatMessageEventPayload>(asker, SERVER_TO_CLIENT.CHAT_MESSAGE);
+    const responderAnswerChatPromise = waitForEvent<ChatMessageEventPayload>(responder, SERVER_TO_CLIENT.CHAT_MESSAGE);
     const askerActionStatePromise = waitForEvent<{ state: string }>(p2, SERVER_TO_CLIENT.TURN_STATE_CHANGED);
     responder.emit(CLIENT_TO_SERVER.ANSWER_QUESTION, { answer: "yes" });
 
-    expect((await answeredPromise).answer).toBe("yes");
+    const answered = await answeredPromise;
+    const [askerAnswerChat, responderAnswerChat] = await Promise.all([
+      askerAnswerChatPromise,
+      responderAnswerChatPromise
+    ]);
+    expect(answered.answer).toBe("yes");
+    expect(askerAnswerChat.text).toBe("Answer: YES");
+    expect(responderAnswerChat.text).toBe("Answer: YES");
     expect((await askerActionStatePromise).state).toBe("awaiting-asker-actions");
 
     const turnEndedPromise = waitForEvent<{ nextActivePlayerId: string }>(p1, SERVER_TO_CLIENT.TURN_ENDED);

@@ -50,6 +50,16 @@ function emitError(socket: Socket, code: string, message: string) {
   socket.emit(SERVER_TO_CLIENT.ACTION_ERROR, { code, message });
 }
 
+function emitRoomChatMessage(io: Server, room: RoomState, fromPlayerId: string, text: string) {
+  const message = {
+    fromPlayerId,
+    text,
+    createdAt: new Date().toISOString()
+  };
+  room.chatLog.push(message);
+  io.to(room.roomCode).emit(SERVER_TO_CLIENT.CHAT_MESSAGE, message);
+}
+
 function normalizeDifficulty(candidate: unknown): RoomDifficulty {
   if (typeof candidate !== "string") {
     return "easy";
@@ -203,6 +213,7 @@ export function createRealtimeApp() {
         fromPlayerId: actor.playerId,
         question
       });
+      emitRoomChatMessage(io, room, actor.playerId, question);
       io.to(room.roomCode).emit(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: room.round.turnState });
     });
 
@@ -234,6 +245,7 @@ export function createRealtimeApp() {
         answer,
         answeredByPlayerId: actor.playerId
       });
+      emitRoomChatMessage(io, room, actor.playerId, `Answer: ${answer.toUpperCase()}`);
       io.to(room.roomCode).emit(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: room.round.turnState });
     });
 
@@ -368,14 +380,7 @@ export function createRealtimeApp() {
         return;
       }
 
-      const text = payload.text.trim();
-      const message = {
-        fromPlayerId: actor.playerId,
-        text,
-        createdAt: new Date().toISOString()
-      };
-      room.chatLog.push(message);
-      io.to(room.roomCode).emit(SERVER_TO_CLIENT.CHAT_MESSAGE, message);
+      emitRoomChatMessage(io, room, actor.playerId, payload.text.trim());
     });
 
     socket.on(CLIENT_TO_SERVER.NEW_GAME, () => {
