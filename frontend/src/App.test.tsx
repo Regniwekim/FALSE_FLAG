@@ -107,8 +107,8 @@ describe("App turn/state control gating", () => {
 
     expect(screen.getByText("Question in flight")).toBeInTheDocument();
 
-    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, {
-      state: "awaiting-answer"
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ACCEPTED, {
+      question: "Is it in Europe?"
     });
 
     await waitFor(() => {
@@ -239,6 +239,59 @@ describe("App turn/state control gating", () => {
     });
   });
 
+  it("shows countdown banner when next round is pending", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROUND_OVER, {
+      winnerPlayerId: "p1",
+      loserPlayerId: "p2",
+      reason: "correct-guess",
+      revealedSecrets: {
+        p1: "us",
+        p2: "ca"
+      }
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.NEXT_ROUND_PENDING, {
+      nextRoundStartsInMs: 1200,
+      upcomingRoundNumber: 2
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/NEXT ROUND IN/i)).toBeInTheDocument();
+    });
+  });
+
+  it("stages round-over reveal before showing both secrets", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Make Guess" })).toBeInTheDocument();
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROUND_OVER, {
+      winnerPlayerId: "p1",
+      loserPlayerId: "p2",
+      reason: "correct-guess",
+      revealedSecrets: {
+        p1: "us",
+        p2: "ca"
+      }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Decrypting field intel...")).toBeInTheDocument();
+      expect(screen.getByText("Your location was CLASSIFIED.")).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Your location was US.")).toBeInTheDocument();
+      expect(screen.getByText("Opponent location was CA.")).toBeInTheDocument();
+    });
+  });
+
   it("filters eliminated flags from the guess modal and emits the selected guess", async () => {
     render(<App />);
     startAsPlayerOne();
@@ -336,5 +389,10 @@ describe("App turn/state control gating", () => {
 
     expect(screen.getByText(/RED\s+CELL/i)).toBeInTheDocument();
     expect(screen.getByText(/BLUE\s+CELL/i)).toBeInTheDocument();
+
+    await waitFor(() => {
+      const selfScoreCard = screen.getByText(/RED\s+CELL/i).closest("article");
+      expect(selfScoreCard?.className.includes("score-card-pulse")).toBe(true);
+    });
   });
 });

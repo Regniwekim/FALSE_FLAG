@@ -77,10 +77,23 @@ export interface IncomingQuestionPayload {
   question: string;
 }
 
+export interface QuestionAcceptedPayload {
+  question: string;
+}
+
 export interface QuestionAnsweredPayload {
   question: string;
   answer: "yes" | "no";
   answeredByPlayerId: string;
+}
+
+export interface GuessLockedPayload {
+  guessedFlagCode: string;
+}
+
+export interface NextRoundPendingPayload {
+  nextRoundStartsInMs: number;
+  upcomingRoundNumber: number;
 }
 
 export interface BoardUpdatedPayload {

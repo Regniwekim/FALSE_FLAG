@@ -60,14 +60,21 @@ describe("Socket integration round transition", () => {
     const activeSocket = activePlayerId === roomCreated.playerId ? p1 : p2;
     const activeSecret = activePlayerId === roomCreated.playerId ? p1Start.yourSecretFlag : p2Start.yourSecretFlag;
 
+    const guessLockedPromise = waitForEvent<{ guessedFlagCode: string }>(activeSocket, SERVER_TO_CLIENT.GUESS_LOCKED);
     const roundOverPromise = waitForEvent<{ winnerPlayerId: string; reason: string }>(p1, SERVER_TO_CLIENT.ROUND_OVER);
+    const nextRoundPendingPromise = waitForEvent<{ nextRoundStartsInMs: number; upcomingRoundNumber: number }>(p1, SERVER_TO_CLIENT.NEXT_ROUND_PENDING);
     const p1NextRoundPromise = waitForEvent<GameStartedPayload>(p1, SERVER_TO_CLIENT.GAME_STARTED);
     const p2NextRoundPromise = waitForEvent<GameStartedPayload>(p2, SERVER_TO_CLIENT.GAME_STARTED);
 
     const transitionStart = Date.now();
     activeSocket.emit(CLIENT_TO_SERVER.MAKE_GUESS, { guessedFlagCode: activeSecret });
+    const guessLocked = await guessLockedPromise;
     const roundOver = await roundOverPromise;
+    const nextRoundPending = await nextRoundPendingPromise;
+    expect(guessLocked.guessedFlagCode).toBe(activeSecret);
     expect(roundOver.reason).toBe("wrong-guess");
+    expect(nextRoundPending.nextRoundStartsInMs).toBeGreaterThan(0);
+    expect(nextRoundPending.upcomingRoundNumber).toBe(p1Start.roundNumber + 1);
 
     const [p1NextRound, p2NextRound] = await Promise.all([p1NextRoundPromise, p2NextRoundPromise]);
     const transitionDurationMs = Date.now() - transitionStart;

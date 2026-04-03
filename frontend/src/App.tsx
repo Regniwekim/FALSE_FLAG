@@ -9,9 +9,12 @@ import {
   type ActionErrorPayload,
   type TurnState,
   type IncomingQuestionPayload,
+  type QuestionAcceptedPayload,
   type QuestionAnsweredPayload,
   type BoardUpdatedPayload,
   type ChatMessageEventPayload,
+  type GuessLockedPayload,
+  type NextRoundPendingPayload,
   type SyncStatePayload,
   type RoundOverPayload,
   type RoomDifficulty
@@ -39,6 +42,10 @@ type ToastMessage = {
   text: string;
   tone: ToastTone;
 };
+
+type RoundRevealPhase = "hidden" | "impact" | "secrets" | "settled";
+
+type ScorePulseTarget = "self" | "opponent" | null;
 
 const DEFAULT_FLAG_CODES = [...FULL_FLAG_CATALOG.slice(0, 24)];
 const DIFFICULTY_LABELS: Record<RoomDifficulty, string> = {
@@ -182,7 +189,11 @@ export function App() {
   const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
   const [pendingQuestionText, setPendingQuestionText] = useState<string | null>(null);
   const [pendingGuessCode, setPendingGuessCode] = useState<string | null>(null);
+  const [nextRoundDeadlineMs, setNextRoundDeadlineMs] = useState<number | null>(null);
+  const [nextRoundCountdownMs, setNextRoundCountdownMs] = useState<number | null>(null);
   const [recentlyConfirmedFlagCode, setRecentlyConfirmedFlagCode] = useState<string | null>(null);
+  const [roundRevealPhase, setRoundRevealPhase] = useState<RoundRevealPhase>("hidden");
+  const [scorePulseTarget, setScorePulseTarget] = useState<ScorePulseTarget>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -200,9 +211,13 @@ export function App() {
   const inviteStatusTimerRef = useRef<number | null>(null);
   const toastTimersRef = useRef<number[]>([]);
   const feedbackResetTimerRef = useRef<number | null>(null);
+  const roundRevealImpactTimerRef = useRef<number | null>(null);
+  const roundRevealSettledTimerRef = useRef<number | null>(null);
+  const scorePulseTimerRef = useRef<number | null>(null);
   const toastIdRef = useRef(0);
   const playerIdRef = useRef<string | null>(null);
   const pendingQuestionRef = useRef<string | null>(null);
+  const scoreRef = useRef<Record<string, number>>({});
   const zoomRef = useRef(1);
   const panRef = useRef({ x: 0, y: 0 });
   const pendingViewportStateRef = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
@@ -237,6 +252,32 @@ export function App() {
     feedbackResetTimerRef.current = window.setTimeout(() => {
       setRecentlyConfirmedFlagCode(null);
     }, 1100);
+  };
+
+  const clearRoundRevealTimers = () => {
+    if (roundRevealImpactTimerRef.current) {
+      window.clearTimeout(roundRevealImpactTimerRef.current);
+      roundRevealImpactTimerRef.current = null;
+    }
+    if (roundRevealSettledTimerRef.current) {
+      window.clearTimeout(roundRevealSettledTimerRef.current);
+      roundRevealSettledTimerRef.current = null;
+    }
+  };
+
+  const pulseScore = (target: ScorePulseTarget) => {
+    if (!target) {
+      return;
+    }
+
+    setScorePulseTarget(target);
+    if (scorePulseTimerRef.current) {
+      window.clearTimeout(scorePulseTimerRef.current);
+    }
+    scorePulseTimerRef.current = window.setTimeout(() => {
+      setScorePulseTarget(null);
+      scorePulseTimerRef.current = null;
+    }, 820);
   };
 
   const patchGameInfo = (patch: Partial<GameStartedPayload>) => {
@@ -312,6 +353,10 @@ export function App() {
       if (feedbackResetTimerRef.current) {
         window.clearTimeout(feedbackResetTimerRef.current);
       }
+      if (scorePulseTimerRef.current) {
+        window.clearTimeout(scorePulseTimerRef.current);
+      }
+      clearRoundRevealTimers();
       for (const timer of toastTimersRef.current) {
         window.clearTimeout(timer);
       }
@@ -325,6 +370,24 @@ export function App() {
   useEffect(() => {
     pendingQuestionRef.current = pendingQuestionText;
   }, [pendingQuestionText]);
+
+  useEffect(() => {
+    if (!nextRoundDeadlineMs) {
+      setNextRoundCountdownMs(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, nextRoundDeadlineMs - Date.now());
+      setNextRoundCountdownMs(remaining);
+    };
+
+    updateCountdown();
+    const interval = window.setInterval(updateCountdown, 100);
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [nextRoundDeadlineMs]);
 
   useEffect(() => {
     socket.connect();
@@ -364,6 +427,7 @@ export function App() {
 
     socket.on(SERVER_TO_CLIENT.ROOM_CREATED, (payload: RoomCreatedPayload) => {
       setPlayerId(payload.playerId);
+      playerIdRef.current = payload.playerId;
       setSeat(payload.seat);
       setRoomCode(payload.roomCode);
       setRoomDifficulty(payload.difficulty);
@@ -373,6 +437,7 @@ export function App() {
 
     socket.on(SERVER_TO_CLIENT.ROOM_JOINED, (payload: RoomCreatedPayload) => {
       setPlayerId(payload.playerId);
+      playerIdRef.current = payload.playerId;
       setSeat(payload.seat);
       setRoomCode(payload.roomCode);
       setRoomDifficulty(payload.difficulty);
@@ -392,7 +457,12 @@ export function App() {
       setIsGuessModalOpen(false);
       setPendingQuestionText(null);
       setPendingGuessCode(null);
+      setNextRoundDeadlineMs(null);
+      setNextRoundCountdownMs(null);
       setRecentlyConfirmedFlagCode(null);
+      setRoundRevealPhase("hidden");
+      setScorePulseTarget(null);
+      scoreRef.current = score;
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("Game started");
       pushToast(`Round ${payload.roundNumber} is live.`, "success");
@@ -411,7 +481,12 @@ export function App() {
       setIsGuessModalOpen(false);
       setPendingQuestionText(null);
       setPendingGuessCode(null);
+      setNextRoundDeadlineMs(null);
+      setNextRoundCountdownMs(null);
       setRecentlyConfirmedFlagCode(null);
+      setRoundRevealPhase("hidden");
+      setScorePulseTarget(null);
+      scoreRef.current = {};
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("New game started");
       pushToast("Rematch deployed. New intel assigned.", "success");
@@ -423,6 +498,11 @@ export function App() {
         pushToast("Question delivered. Awaiting answer.", "success");
         setPendingQuestionText(null);
       }
+    });
+
+    socket.on(SERVER_TO_CLIENT.QUESTION_ACCEPTED, (payload: QuestionAcceptedPayload) => {
+      setPendingQuestionText(null);
+      pushToast(`Question accepted: ${payload.question}`, "success");
     });
 
     socket.on(SERVER_TO_CLIENT.TURN_ENDED, (payload: { nextActivePlayerId: string }) => {
@@ -470,6 +550,11 @@ export function App() {
       setChatMessages((messages) => [...messages.slice(-39), payload]);
     });
 
+    socket.on(SERVER_TO_CLIENT.GUESS_LOCKED, (payload: GuessLockedPayload) => {
+      setPendingGuessCode(payload.guessedFlagCode);
+      pushToast(`Guess locked: ${payload.guessedFlagCode.toUpperCase()}.`, "warning");
+    });
+
     socket.on(SERVER_TO_CLIENT.SYNC_STATE, (payload: SyncStatePayload) => {
       if (payload.turnState) {
         setTurnState(payload.turnState);
@@ -483,6 +568,7 @@ export function App() {
     });
 
     socket.on(SERVER_TO_CLIENT.ROUND_OVER, (payload: RoundOverPayload) => {
+      clearRoundRevealTimers();
       setRoundResult(payload);
       setTurnState("round-over");
       setIsRoundTransitioning(true);
@@ -490,7 +576,14 @@ export function App() {
       setPendingQuestionText(null);
       setPendingGuessCode(null);
       setStatus(`Round over: ${payload.reason}`);
+      setRoundRevealPhase("impact");
       playRoundOver();
+      roundRevealImpactTimerRef.current = window.setTimeout(() => {
+        setRoundRevealPhase("secrets");
+      }, 260);
+      roundRevealSettledTimerRef.current = window.setTimeout(() => {
+        setRoundRevealPhase("settled");
+      }, 820);
       if (payload.reason === "correct-guess") {
         setTimeout(playCorrectGuess, 300);
       } else {
@@ -503,13 +596,42 @@ export function App() {
       }
     });
 
+    socket.on(SERVER_TO_CLIENT.NEXT_ROUND_PENDING, (payload: NextRoundPendingPayload) => {
+      setIsRoundTransitioning(true);
+      setNextRoundDeadlineMs(Date.now() + payload.nextRoundStartsInMs);
+      setNextRoundCountdownMs(payload.nextRoundStartsInMs);
+      pushToast(`Round ${payload.upcomingRoundNumber} incoming.`, "info");
+    });
+
     socket.on(SERVER_TO_CLIENT.SCORE_UPDATED, (payload: { matchScore: Record<string, number> }) => {
+      const currentPlayerId = playerIdRef.current;
+      const previousScore = scoreRef.current;
+      if (currentPlayerId) {
+        const previousSelf = previousScore[currentPlayerId] ?? 0;
+        const nextSelf = payload.matchScore[currentPlayerId] ?? 0;
+        const previousOpponent = Object.entries(previousScore)
+          .filter(([scorePlayerId]) => scorePlayerId !== currentPlayerId)
+          .reduce((sum, [, value]) => sum + value, 0);
+        const nextOpponent = Object.entries(payload.matchScore)
+          .filter(([scorePlayerId]) => scorePlayerId !== currentPlayerId)
+          .reduce((sum, [, value]) => sum + value, 0);
+
+        if (nextSelf > previousSelf) {
+          pulseScore("self");
+        } else if (nextOpponent > previousOpponent) {
+          pulseScore("opponent");
+        }
+      }
+      scoreRef.current = payload.matchScore;
       setScore(payload.matchScore);
     });
 
     socket.on(SERVER_TO_CLIENT.MATCH_OVER, (payload: { winnerPlayerId: string | null }) => {
       setMatchWinnerId(payload.winnerPlayerId ?? null);
       setIsRoundTransitioning(false);
+      setNextRoundDeadlineMs(null);
+      setNextRoundCountdownMs(null);
+      setRoundRevealPhase("settled");
       setStatus("Match over");
       pushToast(
         payload.winnerPlayerId === playerIdRef.current ? "Championship secured." : "Opponent secured the match.",
@@ -739,7 +861,7 @@ export function App() {
     const trimmedQuestion = questionInput.trim();
     playButtonClick();
     setPendingQuestionText(trimmedQuestion);
-    pushToast("Question uplinked.", "info");
+    pushToast("Sending question...", "info");
     socket.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: trimmedQuestion });
     setQuestionInput("");
   };
@@ -794,7 +916,7 @@ export function App() {
     }
     playButtonClick();
     setPendingGuessCode(guessFlagCode);
-    pushToast(`Guess locked: ${guessFlagCode.toUpperCase()}.`, "warning");
+    pushToast("Submitting guess...", "warning");
     triggerHaptic([16, 40, 16]);
     socket.emit(CLIENT_TO_SERVER.MAKE_GUESS, { guessedFlagCode: guessFlagCode });
     closeGuessModal();
@@ -1152,6 +1274,10 @@ export function App() {
         : "OPPONENT TURN";
   const turnBannerClassName = isYourTurn ? "turn-banner turn-banner-active" : "turn-banner";
   const currentMissionLabel = roomCode ? `operation-${roomCode.toLowerCase()}` : "operation-pending";
+  const nextRoundCountdownLabel = nextRoundCountdownMs !== null
+    ? `${Math.max(0.1, nextRoundCountdownMs / 1000).toFixed(1)}s`
+    : null;
+  const areSecretsVisible = roundRevealPhase === "secrets" || roundRevealPhase === "settled";
   const heroPanelClassName = connected
     ? /Reconnecting|Unable/.test(status)
       ? "panel panel-wide hero-panel hero-panel-warning"
@@ -1159,9 +1285,22 @@ export function App() {
     : "panel panel-wide hero-panel hero-panel-offline";
   const resultCardClassName = roundResult
     ? roundResult.winnerPlayerId === playerId
-      ? "result-card result-card-success"
-      : "result-card result-card-danger"
+      ? `result-card result-card-success result-card-phase-${roundRevealPhase}`
+      : `result-card result-card-danger result-card-phase-${roundRevealPhase}`
     : "result-card";
+  const yourScoreCardClassName = [
+    seat === "p2" ? "score-card score-card-blue" : "score-card score-card-red",
+    scorePulseTarget === "self" ? "score-card-pulse" : ""
+  ].filter(Boolean).join(" ");
+  const opponentScoreCardClassName = [
+    seat === "p1" ? "score-card score-card-blue" : "score-card score-card-red",
+    scorePulseTarget === "opponent" ? "score-card-pulse" : ""
+  ].filter(Boolean).join(" ");
+  const matchResultCardClassName = [
+    "result-card",
+    "result-card-match",
+    matchWinnerId === playerId ? "result-card-match-win" : "result-card-match-loss"
+  ].join(" ");
 
   return (
     <main className="app-shell">
@@ -1197,7 +1336,7 @@ export function App() {
       ) : null}
 
       <section className="panel panel-wide score-ribbon">
-        <article className={seat === "p2" ? "score-card score-card-blue" : "score-card score-card-red"}>
+        <article className={yourScoreCardClassName}>
           <span className="score-label">{yourSideLabel} CELL</span>
           <strong>{yourScore}</strong>
           <span className="score-name">{lobby.displayName || "You"}</span>
@@ -1209,11 +1348,13 @@ export function App() {
             Round {gameInfo?.roundNumber ?? "-"} Â· First to {CHAMPIONSHIP_TARGET_WINS} wins
           </p>
           {isRoundTransitioning && !matchWinnerId ? (
-            <p className="round-transition-banner" aria-live="polite">NEXT ROUND INITIALIZING...</p>
+            <p className="round-transition-banner" aria-live="polite">
+              {nextRoundCountdownLabel ? `NEXT ROUND IN ${nextRoundCountdownLabel}` : "NEXT ROUND INITIALIZING..."}
+            </p>
           ) : null}
         </div>
 
-        <article className={seat === "p1" ? "score-card score-card-blue" : "score-card score-card-red"}>
+        <article className={opponentScoreCardClassName}>
           <span className="score-label">{opponentSideLabel} CELL</span>
           <strong>{opponentScore}</strong>
           <span className="score-name">Opponent</span>
@@ -1345,14 +1486,25 @@ export function App() {
             {roundResult ? (
               <div className={resultCardClassName}>
                 <p className="result-title">Round result: {formatRoundReason(roundResult.reason)}</p>
-                <p>Your location was {yourSecretReveal?.toUpperCase() ?? "hidden"}.</p>
-                <p>Opponent location was {opponentSecretReveal?.toUpperCase() ?? "hidden"}.</p>
+                {roundRevealPhase === "impact" ? (
+                  <p className="result-subtitle">Decrypting field intel...</p>
+                ) : null}
+                <p className={areSecretsVisible ? "reveal-line" : "reveal-line reveal-line-hidden"}>
+                  Your location was {areSecretsVisible ? yourSecretReveal?.toUpperCase() ?? "hidden" : "CLASSIFIED"}.
+                </p>
+                <p className={areSecretsVisible ? "reveal-line" : "reveal-line reveal-line-hidden"}>
+                  Opponent location was {areSecretsVisible ? opponentSecretReveal?.toUpperCase() ?? "hidden" : "CLASSIFIED"}.
+                </p>
+                {roundRevealPhase === "settled" ? (
+                  <p className="result-verdict">{roundResult.winnerPlayerId === playerId ? "Intel confirmed. Round secured." : "Cover blown. Regroup for the next round."}</p>
+                ) : null}
               </div>
             ) : null}
 
             {matchWinnerId ? (
-              <div className="result-card result-card-match">
+              <div className={matchResultCardClassName}>
                 <p className="result-title">Match winner: {matchWinnerId === playerId ? "You" : "Opponent"}</p>
+                <p className="result-verdict">{matchWinnerId === playerId ? "Operation complete. Championship secured." : "Operation lost. Queue another rematch."}</p>
                 <div className="controls controls-stack">
                   <button onClick={startNewGame}>Rematch</button>
                   <button onClick={startFreshRoom}>New Room</button>

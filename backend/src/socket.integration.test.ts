@@ -62,17 +62,20 @@ describe("Socket integration full turn loop", () => {
     const asker = isP1Active ? p1 : p2;
     const responder = isP1Active ? p2 : p1;
 
+    const questionAcceptedPromise = waitForEvent<{ question: string }>(asker, SERVER_TO_CLIENT.QUESTION_ACCEPTED);
     const incomingQuestionPromise = waitForEvent<{ question: string }>(responder, SERVER_TO_CLIENT.INCOMING_QUESTION);
     const askerQuestionChatPromise = waitForEvent<ChatMessageEventPayload>(asker, SERVER_TO_CLIENT.CHAT_MESSAGE);
     const responderQuestionChatPromise = waitForEvent<ChatMessageEventPayload>(responder, SERVER_TO_CLIENT.CHAT_MESSAGE);
     const awaitingAnswerStatePromise = waitForEvent<{ state: string }>(p1, SERVER_TO_CLIENT.TURN_STATE_CHANGED);
     asker.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: "Is your flag in Europe?" });
 
+    const questionAccepted = await questionAcceptedPromise;
     const incoming = await incomingQuestionPromise;
     const [askerQuestionChat, responderQuestionChat] = await Promise.all([
       askerQuestionChatPromise,
       responderQuestionChatPromise
     ]);
+    expect(questionAccepted.question).toBe("Is your flag in Europe?");
     expect(incoming.question).toBe("Is your flag in Europe?");
     expect(askerQuestionChat.text).toBe("Is your flag in Europe?");
     expect(responderQuestionChat.text).toBe("Is your flag in Europe?");

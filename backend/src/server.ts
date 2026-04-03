@@ -209,6 +209,9 @@ export function createRealtimeApp() {
       room.round.pendingQuestion = { askedByPlayerId: actor.playerId, text: question };
       room.round.turnState = "awaiting-answer";
 
+      socket.emit(SERVER_TO_CLIENT.QUESTION_ACCEPTED, {
+        question
+      });
       socket.to(room.roomCode).emit(SERVER_TO_CLIENT.INCOMING_QUESTION, {
         fromPlayerId: actor.playerId,
         question
@@ -294,6 +297,9 @@ export function createRealtimeApp() {
         return;
       }
 
+      socket.emit(SERVER_TO_CLIENT.GUESS_LOCKED, {
+        guessedFlagCode: payload.guessedFlagCode
+      });
       const result = gameEngine.resolveGuess(room, actor.playerId, payload.guessedFlagCode);
 
       io.to(room.roomCode).emit(SERVER_TO_CLIENT.ROUND_OVER, {
@@ -315,6 +321,10 @@ export function createRealtimeApp() {
           finalScore: room.championship.winsByPlayerId
         });
       } else {
+        io.to(room.roomCode).emit(SERVER_TO_CLIENT.NEXT_ROUND_PENDING, {
+          nextRoundStartsInMs: NEXT_ROUND_TRANSITION_MS,
+          upcomingRoundNumber: room.championship.roundsPlayed + 1
+        });
         setTimeout(() => {
           if (!room.players.every((roomPlayer) => io.sockets.sockets.has(roomPlayer.socketId))) {
             return;
