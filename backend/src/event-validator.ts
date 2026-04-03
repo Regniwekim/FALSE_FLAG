@@ -2,7 +2,7 @@ import { ERROR_CODES, type ErrorCode } from "@flagwho/shared";
 import type { RoomState } from "./types.js";
 import { isFlagCodeInList } from "./flag-catalog.js";
 
-export interface ValidationResult {
+interface ValidationResult {
   ok: boolean;
   code?: ErrorCode;
   message?: string;

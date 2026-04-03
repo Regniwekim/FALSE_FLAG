@@ -271,10 +271,16 @@ describe("App turn/state control gating", () => {
     expect(within(creditsDialog).getByText("SimpleMaps Free World SVG Map")).toBeInTheDocument();
     expect(within(creditsDialog).getByText("Flagcdn by Flagpedia")).toBeInTheDocument();
     expect(within(creditsDialog).getByText("Wikipedia Contributors")).toBeInTheDocument();
+    expect(within(creditsDialog).getByText("Special Gothic Expanded One and Share Tech Mono")).toBeInTheDocument();
     expect(within(creditsDialog).getByText(/modified for gameplay metadata/i)).toBeInTheDocument();
+    expect(within(creditsDialog).getByText(/Both fonts are served via Google Fonts under the SIL Open Font License/i)).toBeInTheDocument();
     expect(within(creditsDialog).getByRole("link", { name: "Wikimedia Commons flag sources" })).toHaveAttribute("href", "https://commons.wikimedia.org/wiki/Category:SVG_flags_by_country");
     expect(within(creditsDialog).getByRole("link", { name: "SimpleMaps license" })).toHaveAttribute("href", "https://simplemaps.com/resources/svg-license");
     expect(within(creditsDialog).getByRole("link", { name: "CC BY-SA 4.0 license" })).toHaveAttribute("href", "https://creativecommons.org/licenses/by-sa/4.0/");
+    expect(within(creditsDialog).getByRole("link", { name: "Special Gothic Expanded One source" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Special+Gothic+Expanded+One");
+    expect(within(creditsDialog).getByRole("link", { name: "Special Gothic Expanded One license" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Special+Gothic+Expanded+One/license");
+    expect(within(creditsDialog).getByRole("link", { name: "Share Tech Mono source" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Share+Tech+Mono");
+    expect(within(creditsDialog).getByRole("link", { name: "Share Tech Mono license" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Share+Tech+Mono/license");
 
     fireEvent.click(within(creditsDialog).getByRole("button", { name: "Close" }));
 

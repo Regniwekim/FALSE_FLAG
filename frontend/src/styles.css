@@ -1,7 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Audiowide&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Special+Gothic+Expanded+One&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
 
 :root {
+  --font-title: 'Special Gothic Expanded One', Orbitron, 'Bebas Neue', sans-serif;
+  --font-body: 'Share Tech Mono', 'JetBrains Mono', 'IBM Plex Mono', monospace;
   --color-cyan: #00F0FF;
   --color-magenta: #FF10F0;
   --color-pink: #FF006E;
@@ -22,7 +24,7 @@
   --border-neon: rgba(0, 240, 255, 0.42);
   --border-hot: rgba(255, 16, 240, 0.3);
   --shadow-panel: 0 24px 60px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 0, 110, 0.12);
-  font-family: 'Share Tech Mono', JetBrains Mono, IBM Plex Mono, monospace;
+  font-family: var(--font-body);
   color: var(--color-cyan);
   background:
     repeating-linear-gradient(
@@ -355,7 +357,7 @@ body {
 h1,
 h2,
 strong {
-  font-family: 'Audiowide', Orbitron, Bebas Neue, sans-serif;
+  font-family: var(--font-title);
   letter-spacing: 0.04em;
   color: #FF10F0;
 }
@@ -452,14 +454,6 @@ button:hover:not(:disabled):not(.map-flag-card) {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.eyebrow {
-  margin: 0 0 8px;
-  font-size: 12px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: #FF006E;
 }
 
 .hero-panel {
@@ -645,24 +639,6 @@ button:disabled {
   letter-spacing: 0.08em;
 }
 
-.secret-slot-featured {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.secret-slot-featured img {
-  width: 112px;
-  height: auto;
-  display: block;
-  padding: 0;
-  flex-shrink: 0;
-  border-radius: 10px;
-  border: 1px solid #00F0FF77;
-  background: transparent;
-}
-
 .secret-country-panel {
   container-type: inline-size;
   display: grid;
@@ -753,7 +729,7 @@ button:disabled {
 .secret-country-summary-title {
   margin: 0;
   color: #FF10F0;
-  font-family: 'Audiowide', Orbitron, Bebas Neue, sans-serif;
+  font-family: var(--font-title);
   font-size: 1.08rem;
   letter-spacing: 0.04em;
 }
@@ -866,7 +842,6 @@ button:disabled {
 }
 
 .round-panel,
-.board-panel,
 .chat-panel {
   display: flex;
   flex-direction: column;
@@ -999,8 +974,7 @@ button:disabled {
   box-shadow: 0 0 22px #00F0FF14;
 }
 
-.result-title,
-.incoming-label {
+.result-title {
   margin: 0;
   font-weight: 700;
 }
@@ -1233,24 +1207,12 @@ button:disabled {
   letter-spacing: 0.08em;
 }
 
-.action-row {
-  justify-content: flex-start;
-}
-
-.section-heading h2,
 .panel h2,
 .panel strong,
 .panel p,
 .panel li,
 .panel span {
   text-shadow: 0 0 8px #FF006E14;
-}
-
-.section-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 12px;
 }
 
 .map-stage {
@@ -1469,7 +1431,7 @@ button:disabled {
 .map-flag-preview-title {
   margin-top: 4px;
   color: #FF10F0;
-  font-family: 'Audiowide', Orbitron, Bebas Neue, sans-serif;
+  font-family: var(--font-title);
   font-size: 1rem;
   letter-spacing: 0.03em;
   line-height: 1.2;
@@ -1974,23 +1936,6 @@ button:disabled {
   100% {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes incoming-alert {
-  0% {
-    transform: scale(0.98);
-    box-shadow: 0 0 0 #FFBE0B00;
-  }
-
-  50% {
-    transform: scale(1.01);
-    box-shadow: 0 0 22px #FFBE0B33;
-  }
-
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 24px #FFBE0B22;
   }
 }
 
