@@ -1,4 +1,4 @@
-﻿import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+﻿import { memo, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import {
   CLIENT_TO_SERVER,
   FULL_FLAG_CATALOG,
@@ -1390,15 +1390,15 @@ export function App() {
   ].join(" ");
   const mapCanvasClassName = isPanning ? "map-stage map-stage-canvas map-stage-panning" : "map-stage map-stage-canvas";
 
-  const focusDesktopWindow = (windowId: DesktopWindowId) => {
+  const focusDesktopWindow = useCallback((windowId: DesktopWindowId) => {
     setDesktopWindows((currentWindows) => raiseDesktopWindow(currentWindows, windowId));
-  };
+  }, []);
 
-  const handleDesktopWindowLayoutChange = (windowId: DesktopWindowId, nextLayout: DesktopWindowLayout) => {
+  const handleDesktopWindowLayoutChange = useCallback((windowId: DesktopWindowId, nextLayout: DesktopWindowLayout) => {
     setDesktopWindows((currentWindows) => (
       updateDesktopWindowLayout(currentWindows, windowId, nextLayout, viewportSize.width, viewportSize.height)
     ));
-  };
+  }, [viewportSize.height, viewportSize.width]);
 
   const missionConsoleContent = (
     <div className="desktop-panel-content">

@@ -86,7 +86,7 @@ export function DesktopWindow({
       window.removeEventListener("pointercancel", endInteraction);
       endInteraction();
     };
-  }, [interactive, onLayoutChange, onFocus, windowId]);
+  }, [interactive, onLayoutChange, windowId]);
 
   const beginInteraction = (
     event: ReactPointerEvent<HTMLDivElement | HTMLButtonElement>,

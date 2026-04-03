@@ -73,10 +73,12 @@ describe("App turn/state control gating", () => {
 
   beforeEach(() => {
     mocked.socket.removeAllListeners();
+    window.localStorage.clear();
   });
 
   afterEach(() => {
     mocked.socket.removeAllListeners();
+    window.localStorage.clear();
     cleanup();
   });
 
