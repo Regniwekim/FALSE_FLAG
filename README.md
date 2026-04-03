@@ -1,205 +1,187 @@
-﻿# FALSE_FLAG
+# FALSE_FLAG
 
-Server-authoritative, real-time 1v1 deduction game inspired by Guess Who, built as a TypeScript monorepo.
+FALSE_FLAG is a real-time, server-authoritative 1v1 deduction game built as a TypeScript monorepo. Each player receives a secret country flag, asks yes-or-no questions in live chat, eliminates candidates on a private board, and tries to land the correct guess before the opponent. The project combines a React/Vite frontend, an Express/Socket.IO backend, and a shared package for event contracts and flag data.
 
-Players create or join a room, ask yes-or-no questions, eliminate candidates on their own board, and make guesses. Matches run as a best-of-5 championship with automatic next-round transitions.
+## What ships today
 
-## Terminology
-- Room: The pre-game session players create or join.
-- Match: A best-of-5 series.
-- Round: A single game within a match.
+- 2-player rooms with shareable 6-character room codes
+- Four board sizes: `easy` (24), `medium` (36), `hard` (48), `007` (full catalog)
+- Strict turn loop: ask -> answer -> eliminate -> end turn
+- Guess-on-your-turn rule, with immediate loss on wrong guess
+- Best-of-5 championship flow with automatic next-round transitions
+- World-map-based board with pan/zoom, keyboard-friendly guess picker, chat, haptics/audio cues, and mobile-aware layout
+- Render deployment blueprint for separate frontend and backend services
 
-## Current Status
-- Week 3 complete and sign-off ready.
-- Championship loop implemented end-to-end.
-- UI is fully themed (vaporwave/retro), mobile-aware, and LAN-testable.
+## Match rules
 
-## Monorepo Structure
-- frontend: React + TypeScript + Vite client.
-- backend: Node + Express + Socket.io real-time server.
-- shared: Shared types, event names, and validation contracts used by both frontend and backend.
+1. One player creates a room and shares the code or invite link.
+2. A second player joins. The server assigns both players unique secret flags from the same board.
+3. The active player asks one yes-or-no question.
+4. The opponent answers.
+5. The asker can eliminate flags on their own board, then end the turn.
+6. The active player can guess during their turn. A correct guess wins the round; a wrong guess loses the round immediately.
+7. First player to 3 round wins takes the match. If the match is still live, the next round auto-starts after a short transition.
 
-## Implemented Gameplay Features
-- 2-player room lifecycle: create-room and join-room.
-- Full ask/answer/eliminate/end-turn/guess loop.
-- Server-side action validation for actor and state correctness.
-- Wrong-guess immediate loss behavior.
-- Match score tracking across rounds (best of 5).
-- Auto next-round initialization with short transition delay.
-- Match-over result card with Rematch and New Room.
+## Repo layout
 
-## Week 3 UI/UX Highlights
-- Interactive world map board with pan/zoom and fixed-size country tags.
-- Guess modal with icon-enhanced custom picker (flag image + country code).
-- Native-like keyboard picker behavior (arrow keys, Home/End, Enter/Space, typeahead).
-- Modal accessibility improvements (focus trap, Escape close, outside-click close).
-- Transition banner between rounds: NEXT ROUND INITIALIZING...
-- Mobile portrait layout refinements and LAN/mobile testing support.
+```text
+frontend/             React 18 + Vite client
+backend/              Express + Socket.IO server
+shared/               shared event names, payload types, errors, flag catalog
+docs/week0/           architecture freeze, protocol, state model, validation rules
+scripts/              deployment smoke check and map-marker generation
+references/           visual reference material
+render.yaml           Render blueprint for frontend/backend deployment
+roadmap.md            milestone plan and remaining hardening work
+plan.html             original hand-off / build spec
+```
 
-## Prerequisites
-- Node.js 20+ recommended.
-- npm 10+ recommended.
+## Architecture
 
-## Quick Start
-1. Install dependencies:
-   npm install
-2. Start frontend and backend in one command:
-   npm run dev
+```text
+React client <-> Socket.IO <-> Express/Socket.IO server <-> in-memory room state
+                   ^
+                   |
+             shared TypeScript contracts
+```
 
-Default local URLs:
-- Frontend: http://127.0.0.1:5173
-- Backend health: http://127.0.0.1:3001/health
+Key design choices:
 
-## Scripts
-From repository root:
+- The server is the source of truth for room state, turn state, scoring, and round resolution.
+- Opponent secrets and private eliminated-board state are never emitted before round-over.
+- The shared package keeps event names and payload shapes aligned across frontend and backend.
+- The board UI uses generated marker positions over a world SVG rather than a fixed grid.
+- Rooms are currently in-memory. A server restart ends active sessions.
 
-- Start both services:
-  npm run dev
-- Typecheck all packages:
-  npm run typecheck
-- Build all packages:
-  npm run build
-- Run backend tests:
-  npm run test
-- Run frontend unit tests:
-  npm run test:frontend
-- Run Playwright E2E tests:
-  npm run test:e2e
+Useful implementation entry points:
 
-## Local Network Testing (Phones/Tablets)
-1. Start services:
-   npm run dev
-2. Find your machine LAN IP (example: 192.168.1.42).
-3. Open on device browser:
-   http://<YOUR_LAN_IP>:5173
+- [backend/src/server.ts](backend/src/server.ts)
+- [backend/src/game-engine.ts](backend/src/game-engine.ts)
+- [backend/src/event-validator.ts](backend/src/event-validator.ts)
+- [frontend/src/App.tsx](frontend/src/App.tsx)
+- [scripts/recalculate-flag-centroids.mjs](scripts/recalculate-flag-centroids.mjs)
 
-Notes:
-- Frontend binds to 0.0.0.0:5173.
-- Backend binds to 0.0.0.0:3001.
-- Client socket target defaults to current browser hostname on port 3001.
-- Optional override for backend URL:
-  set VITE_SOCKET_URL=http://<HOST>:<PORT>
+The map-marker pipeline reads [frontend/public/world-coordinates.svg](frontend/public/world-coordinates.svg), computes centroids, and writes marker positions into [frontend/src/world-map-marker-positions.ts](frontend/src/world-map-marker-positions.ts). The gameplay board itself renders [frontend/public/world.svg](frontend/public/world.svg).
 
-## Quality Gates (Current)
-- Backend tests: 22/22 passing.
-- Frontend unit tests: 10/10 passing.
-- E2E tests: 3/3 passing.
-- Workspace typecheck and build: passing.
+## Local development
 
-## Security/Architecture Notes
-- Server is the source of truth for room and round state.
-- Clients are gated from invalid actions based on turn/state.
-- Opponent secret is not exposed before round-over.
+Prerequisites:
 
-## Deploying to Render
-This repo is configured for a two-service Render deployment:
-- Backend: Render Web Service (Node + Express + Socket.io)
-- Frontend: Render Static Site (Vite build output)
+- Node.js 20+ recommended
+- npm 10+ recommended
 
-### Why this topology
-- Frontend is served over Render's CDN as static assets.
-- Backend can scale independently for real-time Socket.io traffic.
-- Clear separation keeps runtime and troubleshooting simpler.
+Install dependencies:
 
-### Render Blueprint
-- Infrastructure-as-code is defined in `render.yaml` at repo root.
-- Sync this Blueprint from the Render dashboard to create/update both services.
-- Blueprint defaults include:
-  - Explicit service plans (`starter` backend, `free` static frontend).
-  - Build filters that ignore docs/reference-only changes to reduce unnecessary deploys.
-  - Static-site security headers (`X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`).
+```bash
+npm install
+```
 
-### Required environment variables
-Set these in Render before the first production deploy:
+Start the full stack:
 
-- Backend service
-  - `NODE_ENV=production`
-  - `HOST=0.0.0.0`
-  - `CORS_ORIGINS=https://<your-frontend-domain>`
-    - Use comma-separated values for multiple origins.
-    - Optional: set `*` to allow all origins (not recommended for production).
+```bash
+npm run dev
+```
 
-- Frontend service
-  - `VITE_SOCKET_URL=https://<your-backend-domain>`
+Local URLs:
 
-For local development, use `.env.example` as a template.
+- Frontend: `http://127.0.0.1:5173`
+- Backend health: `http://127.0.0.1:3001/health`
 
-### Render deployment checklist
-1. Push latest code to `main`.
-2. In Render, create a new Blueprint instance from this repository.
-3. Confirm both services are created from `render.yaml`.
-4. Set required environment variables for each service.
-5. Trigger deploy and confirm:
-   - Backend health check passes at `/health`.
-   - Frontend loads and can connect to backend socket endpoint.
-6. Validate deep links (refresh on non-root route) to confirm SPA rewrite is active.
-7. Optional: open a pull request and manually generate service previews (Blueprint defaults previews to manual).
+LAN testing:
 
-### Fast launch path (friends-ready)
-Use this when your goal is to play quickly, not run full production operations.
+- Both dev servers bind to `0.0.0.0`, so phones and tablets on the same network can open `http://<your-lan-ip>:5173`.
+- By default the frontend connects to `http://<current-browser-hostname>:3001`, which makes local network testing work without extra setup in most cases.
+- Set `VITE_SOCKET_URL` if you need the client to target a different backend.
 
-1. Deploy with Blueprint as-is.
-2. Set only one required variable on frontend service:
-  - `VITE_SOCKET_URL=https://<your-backend-service>.onrender.com`
-3. Do not set `CORS_ORIGINS` yet.
-  - Backend allows all origins if this variable is missing, which is fine for casual testing with friends.
-4. Wait for both services to show healthy/active.
-5. Share frontend URL and play.
+## Commands
 
-Practical notes for friend sessions:
-1. Free plans can sleep after inactivity, so first load may take a short warm-up.
-2. If socket connection fails, verify frontend `VITE_SOCKET_URL` exactly matches backend HTTPS URL.
-3. Keep only one active backend/frontend pair while testing to avoid sharing the wrong URL.
+From the repository root:
 
-### Staged rollout (recommended)
-1. Deploy backend first and wait for healthy status.
-2. Run smoke check against backend:
-  - PowerShell: `$env:BACKEND_HEALTH_URL='https://<backend-domain>/health'; npm run smoke:render`
-3. Deploy frontend and validate live app path.
-4. Run full smoke check:
-  - PowerShell: `$env:BACKEND_HEALTH_URL='https://<backend-domain>/health'; $env:FRONTEND_URL='https://<frontend-domain>'; npm run smoke:render`
-5. Run a live two-player gameplay check (create/join room, one round, rematch/new game).
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start frontend and backend together |
+| `npm run typecheck` | Type-check `shared`, `backend`, and `frontend` |
+| `npm run build` | Build the whole workspace in dependency order |
+| `npm run test` | Run backend Vitest suites |
+| `npm run test:frontend` | Run frontend Vitest suites |
+| `npm run test:e2e` | Run Playwright browser flows |
+| `npm run smoke:render` | Check deployed backend and frontend reachability |
 
-### Rollback playbook
-1. In Render dashboard, open the failing service and select Rollback to previous healthy deploy.
-2. Re-run smoke checks immediately after rollback.
-3. If backend was rolled back, verify frontend still points to compatible backend endpoint.
-4. If frontend was rolled back, verify socket connectivity and room flow from two clients.
-5. Capture the failing deploy logs and events before reattempting.
+Useful package-level commands:
 
-### Post-deploy smoke test
-- Open frontend URL and create a room.
-- Join from a second browser/device.
-- Verify ask/answer/end-turn/guess loop.
-- Verify rematch/new-game and round transitions.
+| Command | Purpose |
+| --- | --- |
+| `npm run dev -w frontend` | Start only the Vite client |
+| `npm run dev -w backend` | Start only the backend with `tsx watch` |
+| `npm run build:prod -w frontend` | Optimize `public/world.svg` with SVGO, then build the frontend |
+| `node scripts/recalculate-flag-centroids.mjs --write` | Regenerate `shared/src/flags.ts` and `frontend/src/world-map-marker-positions.ts` from the coordinate SVG |
 
-You can also run an automated reachability check from your terminal:
+## Configuration
 
-1. Backend only:
-  - `npm run smoke:render`
-2. Backend + frontend:
-  - PowerShell: `$env:BACKEND_HEALTH_URL='https://<backend-domain>/health'; $env:FRONTEND_URL='https://<frontend-domain>'; npm run smoke:render`
+Local development works without extra environment variables. The repository includes [.env.example](.env.example) as a reference for the supported settings.
 
-The smoke script validates more than status codes:
-- Backend must return JSON with `{ "ok": true }` from the health endpoint.
-- Frontend must return an HTML document response.
+| Variable | Used by | Default | Notes |
+| --- | --- | --- | --- |
+| `HOST` | backend | `0.0.0.0` | Backend bind host |
+| `PORT` | backend | `3001` | Backend port |
+| `CORS_ORIGINS` | backend | empty | Comma-separated browser allowlist; if unset, the backend allows all origins |
+| `VITE_SOCKET_URL` | frontend | `http://<current-hostname>:3001` | Override Socket.IO target for deployed or split environments |
 
-### Troubleshooting on Render
-- Build fails early:
-  - Ensure npm dependencies install successfully and workspace builds pass locally with `npm run build`.
-- Backend unhealthy:
-  - Confirm service is binding to `HOST=0.0.0.0` and `PORT` from environment.
-  - Confirm `/health` returns 2xx quickly.
-- Frontend cannot connect to socket:
-  - Confirm `VITE_SOCKET_URL` points to backend public HTTPS URL.
-  - Confirm backend `CORS_ORIGINS` includes frontend exact origin.
-- WebSocket disconnects during deploy:
-  - Expected during instance replacement; backend now performs graceful SIGTERM shutdown.
+## Testing
 
-## Next Phase
-Week 4 hardening:
-- Rate limits.
-- Reconnect/session continuity.
-- Input sanitization and audit logging.
-- Reliability and production readiness work.
+The repo uses three layers of automated coverage:
 
+- Backend Vitest suites cover the validator, game engine, full socket flows, privacy rules, wrong-guess handling, and round transitions.
+- Frontend Vitest covers turn-state gating, score updates, guess modal behavior, and round-over UI sequencing.
+- Playwright covers two-browser gameplay, round-over/rematch flow, and mobile portrait behavior.
+
+Test locations:
+
+- `backend/src/*.test.ts`
+- `frontend/src/App.test.tsx`
+- `frontend/e2e/*.spec.ts`
+
+## Deployment
+
+[render.yaml](render.yaml) defines a two-service Render setup:
+
+- `false-flag-backend`: Node web service with `/health`
+- `false-flag-frontend`: static site that serves the Vite build and rewrites SPA routes to `index.html`
+
+Minimal Render setup:
+
+1. Create services from `render.yaml`.
+2. Set `VITE_SOCKET_URL=https://<backend-domain>` on the frontend service.
+3. Set `CORS_ORIGINS=https://<frontend-domain>` on the backend when you want a production browser allowlist.
+4. Deploy and confirm the backend health endpoint returns `{ "ok": true }`.
+
+Optional smoke test after deploy:
+
+```powershell
+$env:BACKEND_HEALTH_URL = "https://<backend-domain>/health"
+$env:FRONTEND_URL = "https://<frontend-domain>"
+npm run smoke:render
+```
+
+## Additional docs
+
+- [docs/week0/architecture-freeze.md](docs/week0/architecture-freeze.md)
+- [docs/week0/protocol-spec.md](docs/week0/protocol-spec.md)
+- [docs/week0/state-model.md](docs/week0/state-model.md)
+- [docs/week0/validation-matrix.md](docs/week0/validation-matrix.md)
+- [roadmap.md](roadmap.md)
+- [plan.html](plan.html)
+
+## Current limitations
+
+These are already reflected in the roadmap and codebase:
+
+- Room state is in-memory only.
+- Reconnect and session continuity are not implemented yet.
+- Rate limiting and audit logging are planned hardening work rather than shipped features.
+
+## Asset and data credits
+
+- The world map assets in [frontend/public/world.svg](frontend/public/world.svg) and [frontend/public/world-coordinates.svg](frontend/public/world-coordinates.svg) are based on the SimpleMaps Free World SVG Map: https://simplemaps.com/resources/svg-world
+- SimpleMaps SVG usage/license page: https://simplemaps.com/resources/svg-license
+- Flag thumbnails are loaded at runtime from `https://flagcdn.com` using the country-code catalog in [shared/src/flags.ts](shared/src/flags.ts)

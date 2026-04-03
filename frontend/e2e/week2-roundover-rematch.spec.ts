@@ -13,6 +13,10 @@ async function getRoomCode(page: Page): Promise<string> {
   throw new Error("Timed out waiting for generated room code");
 }
 
+async function expectRoundNumber(page: Page, roundNumber: number): Promise<void> {
+  await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
+}
+
 test("round-over and new-game reset flow works across two clients", async ({ browser, page }) => {
   const context2: BrowserContext = await browser.newContext();
   const page2 = await context2.newPage();
@@ -28,12 +32,12 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
   await page2.getByPlaceholder("Room code").fill(roomCode);
   await page2.getByRole("button", { name: "Join Room" }).click();
 
-  await expect(page.getByText(/Round\s+1/i)).toBeVisible();
-  await expect(page2.getByText(/Round\s+1/i)).toBeVisible();
+  await expectRoundNumber(page, 1);
+  await expectRoundNumber(page2, 1);
 
   // Force three wrong guesses by always guessing own secret (secrets are unique per round).
   for (let round = 1; round <= 3; round += 1) {
-    await expect(page.getByText(new RegExp(`Round\\s+${round}`, "i"))).toBeVisible();
+    await expectRoundNumber(page, round);
     const ownSecretText = await page.locator(".secret-slot strong").innerText();
     await page.getByRole("button", { name: "Make Guess" }).click();
     await page.getByRole("combobox", { name: "Guess flag" }).click();
@@ -41,9 +45,10 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
     await page.getByRole("button", { name: "Confirm Guess" }).click();
 
     if (round < 3) {
-      const transitionBanner = page.getByText("NEXT ROUND INITIALIZING...");
+      const transitionBanner = page.getByTestId("round-transition-banner");
       await expect(transitionBanner).toBeVisible();
-      await expect(page.getByText(new RegExp(`Round\\s+${round + 1}`, "i"))).toBeVisible();
+      await expect(transitionBanner).toContainText(/NEXT ROUND/i);
+      await expectRoundNumber(page, round + 1);
       await expect(transitionBanner).toHaveCount(0);
     }
   }
@@ -56,8 +61,8 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
   await expect(page.getByText(/New game started/i)).toBeVisible();
   await expect(page2.getByText(/New game started/i)).toBeVisible();
 
-  await expect(page.getByText(/Round\s+1/i)).toBeVisible();
-  await expect(page2.getByText(/Round\s+1/i)).toBeVisible();
+  await expectRoundNumber(page, 1);
+  await expectRoundNumber(page2, 1);
 
   await context2.close();
 });

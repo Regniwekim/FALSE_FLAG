@@ -44,7 +44,10 @@ const ID_TO_CODE = {
 
 const FLAGS_FILE = path.resolve("shared/src/flags.ts");
 const MARKERS_FILE = path.resolve("frontend/src/world-map-marker-positions.ts");
-const SVG_FILE = path.resolve("frontend/public/world.svg");
+const SVG_FILE = path.resolve("frontend/public/world-coordinates.svg");
+
+const TARGET_MAP_WIDTH = 2000;
+const TARGET_MAP_HEIGHT = 857;
 
 const shouldWrite = process.argv.includes("--write");
 const svgText = await fs.readFile(SVG_FILE, "utf8");
@@ -197,7 +200,7 @@ const output = await page.evaluate(
       markers[code] = centroid;
     }
 
-    return { codes, markers };
+    return { codes, markers, width, height };
   },
   { inputSvg: svgText, classToCode: CLASS_TO_CODE, idToCode: ID_TO_CODE }
 );
@@ -208,7 +211,9 @@ const markerEntries = output.codes
   .filter((code) => output.markers[code])
   .map((code) => {
     const marker = output.markers[code];
-    return `  ${code.toLowerCase()}: { x: ${marker.x}, y: ${marker.y} },`;
+    const scaledX = Number(((marker.x / output.width) * TARGET_MAP_WIDTH).toFixed(1));
+    const scaledY = Number(((marker.y / output.height) * TARGET_MAP_HEIGHT).toFixed(1));
+    return `  ${code.toLowerCase()}: { x: ${scaledX}, y: ${scaledY} },`;
   });
 
 const markerSource = `export type FlagMarkerPositions = Record<string, { x: number; y: number }>;

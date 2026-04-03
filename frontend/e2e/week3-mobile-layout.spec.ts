@@ -13,6 +13,10 @@ async function getRoomCode(page: Page): Promise<string> {
   throw new Error("Timed out waiting for generated room code");
 }
 
+async function expectRoundNumber(page: Page, roundNumber: number): Promise<void> {
+  await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
+}
+
 test("week 3 mobile portrait layout stays usable in active match", async ({ browser }) => {
   const hostContext: BrowserContext = await browser.newContext();
   const mobileContext: BrowserContext = await browser.newContext({
@@ -34,7 +38,7 @@ test("week 3 mobile portrait layout stays usable in active match", async ({ brow
   await mobilePage.getByPlaceholder("Room code").fill(roomCode);
   await mobilePage.getByRole("button", { name: "Join Room" }).click();
 
-  await expect(mobilePage.getByText(/Round\s+1/i)).toBeVisible();
+  await expectRoundNumber(mobilePage, 1);
   await expect(mobilePage.locator(".score-ribbon")).toBeVisible();
   await expect(mobilePage.getByText(/YOUR TURN|OPPONENT TURN/i)).toBeVisible();
 

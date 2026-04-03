@@ -13,6 +13,10 @@ async function getRoomCode(page: Page): Promise<string> {
   throw new Error("Timed out waiting for generated room code");
 }
 
+async function expectRoundNumber(page: Page, roundNumber: number): Promise<void> {
+  await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
+}
+
 test("two-player Week 2 gameplay loop works across browser contexts", async ({ browser, page }) => {
   const context2: BrowserContext = await browser.newContext();
   const page2 = await context2.newPage();
@@ -30,23 +34,29 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await page2.getByPlaceholder("Room code").fill(roomCode);
   await page2.getByRole("button", { name: "Join Room" }).click();
 
-  await expect(page.getByText(/Round\s+1/i)).toBeVisible();
-  await expect(page2.getByText(/Round\s+1/i)).toBeVisible();
+  await expectRoundNumber(page, 1);
+  await expectRoundNumber(page2, 1);
 
   await expect(page.getByPlaceholder("Ask a yes-or-no question")).toBeEnabled();
   await page.getByPlaceholder("Ask a yes-or-no question").fill("Is it in Europe?");
   await page.getByRole("button", { name: "Ask" }).click();
 
-  await expect(page2.getByText(/^Is it in Europe\?$/)).toBeVisible();
+  await expect(page2.getByTestId("incoming-question")).toHaveText(/^Is it in Europe\?$/);
   await expect(page2.getByRole("button", { name: "Answer Yes" })).toBeEnabled();
   await page2.getByRole("button", { name: "Answer Yes" }).click();
 
-  await expect(page.getByText(/Last Q\/A:/)).toContainText("YES");
+  await expect(page.locator(".event-strip")).toContainText("YES");
 
-  await expect(page.getByRole("button", { name: "US" })).toBeEnabled();
-  await page.getByRole("button", { name: "US" }).click();
-  await expect(page.getByRole("button", { name: "US" })).toHaveClass(/flag-card-eliminated/);
-  await expect(page2.getByRole("button", { name: "US" })).not.toHaveClass(/flag-card-eliminated/);
+  const eliminableFlagButton = page.locator(".map-stage .map-flag-card:visible").first();
+  const eliminableFlagLabel = await eliminableFlagButton.getAttribute("aria-label");
+  if (!eliminableFlagLabel) {
+    throw new Error("Expected at least one visible eliminable flag button");
+  }
+
+  await expect(eliminableFlagButton).toBeEnabled();
+  await eliminableFlagButton.click();
+  await expect(page.getByRole("button", { name: eliminableFlagLabel })).toHaveClass(/flag-card-eliminated/);
+  await expect(page2.getByRole("button", { name: eliminableFlagLabel })).not.toHaveClass(/flag-card-eliminated/);
 
   await expect(page.getByRole("button", { name: "End Turn" })).toBeEnabled();
   await page.getByRole("button", { name: "End Turn" }).click();

@@ -1344,11 +1344,11 @@ export function App() {
 
         <div className="score-center">
           <p className={turnBannerClassName}>{turnBannerText}</p>
-          <p className="score-subtitle">
+          <p className="score-subtitle" data-testid="round-status">
             Round {gameInfo?.roundNumber ?? "-"} Â· First to {CHAMPIONSHIP_TARGET_WINS} wins
           </p>
           {isRoundTransitioning && !matchWinnerId ? (
-            <p className="round-transition-banner" aria-live="polite">
+            <p className="round-transition-banner" data-testid="round-transition-banner" aria-live="polite">
               {nextRoundCountdownLabel ? `NEXT ROUND IN ${nextRoundCountdownLabel}` : "NEXT ROUND INITIALIZING..."}
             </p>
           ) : null}
@@ -1531,7 +1531,7 @@ export function App() {
         {incomingQuestion ? (
           <div className="incoming-card incoming-card-alert">
             <p className="incoming-label">Incoming interrogation</p>
-            <strong>{incomingQuestion}</strong>
+            <strong data-testid="incoming-question">{incomingQuestion}</strong>
             <div className="controls controls-stack">
               <button onClick={() => answerQuestion("yes")} disabled={!canAnswer}>Answer Yes</button>
               <button onClick={() => answerQuestion("no")} disabled={!canAnswer}>Answer No</button>
