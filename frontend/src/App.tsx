@@ -2243,17 +2243,13 @@ export function App() {
             <p className="section-subtitle">Hold Ctrl and scroll to zoom. Drag exposed canvas to pan. Move windows to uncover markers.</p>
           </div>
           <div className="map-hud-toolbar">
-            <p className="board-meta" data-testid="candidate-count">{remainingFlags.length} candidate locations remaining</p>
             <div className="map-zoom-controls" aria-label="Map zoom controls">
               <button type="button" onClick={zoomOut} aria-label="Zoom out">-</button>
               <button type="button" onClick={resetMapView} aria-label="Reset map view">o</button>
               <button type="button" onClick={zoomIn} aria-label="Zoom in">+</button>
             </div>
           </div>
-          <div className="map-legend">
-            <span><i className="legend-dot legend-dot-live" /> Active candidate</span>
-            <span><i className="legend-dot legend-dot-dead" /> Eliminated candidate</span>
-          </div>
+
         </section>
 
         <div className={isDesktopWindowing ? "desktop-window-stage" : "desktop-window-stage desktop-window-stage-stacked"}>
