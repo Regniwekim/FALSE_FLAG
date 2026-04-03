@@ -1,10 +1,10 @@
 import { test, expect, type Page, type BrowserContext } from "@playwright/test";
 
 async function getRoomCode(page: Page): Promise<string> {
-  const roomLine = page.locator(".hero-meta .meta-pill").filter({ hasText: /^room /i }).first();
+  const roomLine = page.getByTestId("mission-room-code");
   await expect(roomLine).toBeVisible();
   for (let i = 0; i < 30; i += 1) {
-    const text = (await roomLine.innerText()).replace(/^room\s+/i, "").trim();
+    const text = (await roomLine.innerText()).trim();
     if (text && text.toLowerCase() !== "none") {
       return text;
     }
@@ -15,6 +15,14 @@ async function getRoomCode(page: Page): Promise<string> {
 
 async function expectRoundNumber(page: Page, roundNumber: number): Promise<void> {
   await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
+}
+
+async function expectQuestionAnswerHistory(page: Page, question: string, answer: "YES" | "NO"): Promise<void> {
+  const historyTable = page.getByRole("table", { name: "Question and answer history" });
+
+  await expect(historyTable).toBeVisible();
+  await expect(historyTable.getByText(question, { exact: true })).toBeVisible();
+  await expect(historyTable.getByRole("cell", { name: answer, exact: true })).toBeVisible();
 }
 
 async function findFirstUncoveredMarkerLabel(page: Page): Promise<string | null> {
@@ -112,6 +120,7 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
 
   const roomCode = await getRoomCode(page);
   await expect(page.getByText(/Waiting for opponent/i)).toBeVisible();
+  await expect(page.getByTestId("chat-window")).toBeVisible();
 
   await page2.getByPlaceholder("Display name").fill("P2");
   await page2.getByPlaceholder("Room code").fill(roomCode);
@@ -128,7 +137,7 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await expect(page2.getByRole("button", { name: "Answer Yes" })).toBeEnabled();
   await page2.getByRole("button", { name: "Answer Yes" }).click();
 
-  await expect(page.locator(".event-strip")).toContainText("YES");
+  await expectQuestionAnswerHistory(page, "Is it in Europe\?", "YES");
 
   const eliminableFlagLabel = await clickFirstUncoveredMarker(page);
   const localMarker = page.getByTestId("map-canvas").locator(`.map-flag-card[aria-label="${eliminableFlagLabel}"]`).first();

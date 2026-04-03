@@ -1,5 +1,5 @@
 export const DESKTOP_WINDOW_BREAKPOINT = 1024;
-export const DESKTOP_WINDOW_STORAGE_KEY = "false-flag.desktop-layout.v1";
+export const DESKTOP_WINDOW_STORAGE_KEY = "false-flag.desktop-layout.v2";
 
 const WINDOW_MARGIN = 24;
 const WINDOW_TOP_SAFE_AREA = 228;

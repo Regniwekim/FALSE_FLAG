@@ -1,10 +1,10 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 
 async function getRoomCode(page: Page): Promise<string> {
-  const roomLine = page.locator(".hero-meta .meta-pill").filter({ hasText: /^room /i }).first();
+  const roomLine = page.getByTestId("mission-room-code");
   await expect(roomLine).toBeVisible();
   for (let i = 0; i < 30; i += 1) {
-    const text = (await roomLine.innerText()).replace(/^room\s+/i, "").trim();
+    const text = (await roomLine.innerText()).trim();
     if (text && text.toLowerCase() !== "none") {
       return text;
     }
@@ -15,6 +15,10 @@ async function getRoomCode(page: Page): Promise<string> {
 
 async function expectRoundNumber(page: Page, roundNumber: number): Promise<void> {
   await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
+}
+
+async function focusWindow(page: Page, testId: string): Promise<void> {
+  await page.getByTestId(testId).locator(".desktop-window-titlebar").click({ force: true });
 }
 
 test("round-over and new-game reset flow works across two clients", async ({ browser, page }) => {
@@ -39,6 +43,7 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
   for (let round = 1; round <= 3; round += 1) {
     await expectRoundNumber(page, round);
     const ownSecretText = await page.locator(".secret-slot strong").innerText();
+    await focusWindow(page, "intel-window");
     await page.getByRole("button", { name: "Make Guess" }).click();
     await page.getByRole("combobox", { name: "Guess flag" }).click();
     await page.getByRole("option", { name: ownSecretText }).click();
@@ -61,8 +66,8 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
 
   await page.getByRole("button", { name: "Rematch" }).click();
 
-  await expect(page.getByText(/New game started/i)).toBeVisible();
-  await expect(page2.getByText(/New game started/i)).toBeVisible();
+  await expect(page.getByTestId("mission-window")).toHaveCount(0);
+  await expect(page2.getByTestId("mission-window")).toHaveCount(0);
 
   await expectRoundNumber(page, 1);
   await expectRoundNumber(page2, 1);

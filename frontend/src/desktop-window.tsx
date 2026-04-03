@@ -1,5 +1,16 @@
-import { useEffect, useRef, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
+} from "react";
 import type { DesktopWindowId, DesktopWindowLayout } from "./window-layout";
+
+const COLLAPSED_WINDOW_HEIGHT = 64;
+const COLLAPSE_TRANSITION_MS = 220;
 
 type DesktopWindowProps = {
   windowId: DesktopWindowId;
@@ -7,9 +18,12 @@ type DesktopWindowProps = {
   subtitle?: string;
   layout: DesktopWindowLayout;
   interactive: boolean;
+  canCollapse?: boolean;
+  isCollapsed?: boolean;
   className?: string;
   dataTestId?: string;
   onFocus: (windowId: DesktopWindowId) => void;
+  onToggleCollapsed?: (windowId: DesktopWindowId) => void;
   onLayoutChange: (windowId: DesktopWindowId, nextLayout: DesktopWindowLayout) => void;
   children: ReactNode;
 };
@@ -27,14 +41,21 @@ export function DesktopWindow({
   subtitle,
   layout,
   interactive,
+  canCollapse,
+  isCollapsed,
   className,
   dataTestId,
   onFocus,
+  onToggleCollapsed,
   onLayoutChange,
   children
 }: DesktopWindowProps) {
   const interactionRef = useRef<WindowInteraction | null>(null);
   const previousUserSelectRef = useRef("");
+  const collapseTransitionTimerRef = useRef<number | null>(null);
+  const hasInitializedCollapseRef = useRef(false);
+  const isWindowCollapsed = interactive && Boolean(canCollapse) && Boolean(isCollapsed);
+  const [isCollapseTransitioning, setIsCollapseTransitioning] = useState(false);
 
   useEffect(() => {
     if (!interactive) {
@@ -88,6 +109,35 @@ export function DesktopWindow({
     };
   }, [interactive, onLayoutChange, windowId]);
 
+  useEffect(() => {
+    if (!interactive || !canCollapse) {
+      return;
+    }
+
+    if (!hasInitializedCollapseRef.current) {
+      hasInitializedCollapseRef.current = true;
+      return;
+    }
+
+    setIsCollapseTransitioning(true);
+
+    if (collapseTransitionTimerRef.current) {
+      window.clearTimeout(collapseTransitionTimerRef.current);
+    }
+
+    collapseTransitionTimerRef.current = window.setTimeout(() => {
+      setIsCollapseTransitioning(false);
+      collapseTransitionTimerRef.current = null;
+    }, COLLAPSE_TRANSITION_MS);
+
+    return () => {
+      if (collapseTransitionTimerRef.current) {
+        window.clearTimeout(collapseTransitionTimerRef.current);
+        collapseTransitionTimerRef.current = null;
+      }
+    };
+  }, [canCollapse, interactive, isWindowCollapsed]);
+
   const beginInteraction = (
     event: ReactPointerEvent<HTMLDivElement | HTMLButtonElement>,
     mode: WindowInteraction["mode"]
@@ -114,6 +164,8 @@ export function DesktopWindow({
     "panel",
     "desktop-window",
     interactive ? "desktop-window-floating" : "desktop-window-static",
+    isWindowCollapsed ? "desktop-window-collapsed" : "",
+    isCollapseTransitioning ? "desktop-window-transitioning" : "",
     className ?? ""
   ].filter(Boolean).join(" ");
 
@@ -121,9 +173,25 @@ export function DesktopWindow({
     left: `${layout.x}px`,
     top: `${layout.y}px`,
     width: `${layout.width}px`,
-    height: `${layout.height}px`,
+    height: `${isWindowCollapsed ? COLLAPSED_WINDOW_HEIGHT : layout.height}px`,
     zIndex: layout.zIndex
   } as CSSProperties : undefined;
+
+  const handleCollapseButtonPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (interactive) {
+      onFocus(windowId);
+    }
+  };
+
+  const handleCollapseButtonClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (interactive) {
+      onFocus(windowId);
+    }
+    onToggleCollapsed?.(windowId);
+  };
 
   return (
     <section
@@ -145,15 +213,29 @@ export function DesktopWindow({
         <div className="desktop-window-titlecopy">
           <p className="desktop-window-kicker">sys.node::{windowId}</p>
           <h2>{title}</h2>
-          {subtitle ? <p className="desktop-window-subtitle">{subtitle}</p> : null}
+          {!isWindowCollapsed && subtitle ? <p className="desktop-window-subtitle">{subtitle}</p> : null}
         </div>
-        <div className="desktop-window-badges" aria-hidden="true">
-          <span className="desktop-window-led" />
-          <span className="desktop-window-chip">live</span>
+        <div className="desktop-window-chrome">
+          {canCollapse ? (
+            <button
+              type="button"
+              className="desktop-window-collapse"
+              aria-label={`${isWindowCollapsed ? "Expand" : "Minimize"} ${title}`}
+              aria-expanded={!isWindowCollapsed}
+              onPointerDown={handleCollapseButtonPointerDown}
+              onClick={handleCollapseButtonClick}
+            >
+              {isWindowCollapsed ? "+" : "-"}
+            </button>
+          ) : null}
+          <div className="desktop-window-badges" aria-hidden="true">
+            <span className="desktop-window-led" />
+            <span className="desktop-window-chip">live</span>
+          </div>
         </div>
       </div>
-      <div className="desktop-window-body">{children}</div>
-      {interactive ? (
+      {!isWindowCollapsed ? <div className="desktop-window-body">{children}</div> : null}
+      {interactive && !isWindowCollapsed ? (
         <button
           type="button"
           className="desktop-window-resizer"

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { App } from "./App";
 import { CLIENT_TO_SERVER, SERVER_TO_CLIENT } from "@flagwho/shared";
 
@@ -78,8 +78,209 @@ describe("App turn/state control gating", () => {
 
   afterEach(() => {
     mocked.socket.removeAllListeners();
+    vi.useRealTimers();
     window.localStorage.clear();
     cleanup();
+  });
+
+  it("keeps the title header minimal and relocates session metadata into mission and intel windows", async () => {
+    const { container } = render(<App />);
+
+    const heroPanel = container.querySelector(".hero-panel") as HTMLElement | null;
+    expect(heroPanel).not.toBeNull();
+    expect(within(heroPanel as HTMLElement).getByRole("heading", { name: /\.FALSE_FLAG\/\/Global Signal/i })).toBeInTheDocument();
+    expect(within(heroPanel as HTMLElement).getByRole("button", { name: "How to Play" })).toBeInTheDocument();
+    expect(within(heroPanel as HTMLElement).getByRole("button", { name: "Credits" })).toBeInTheDocument();
+    expect(within(heroPanel as HTMLElement).queryByText(/Week 3 Build In Progress/i)).not.toBeInTheDocument();
+    expect(within(heroPanel as HTMLElement).queryByText(/Disconnected/i)).not.toBeInTheDocument();
+    expect((heroPanel as HTMLElement).querySelector(".hero-meta")).toBeNull();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROOM_CREATED, {
+      roomCode: "ABC123",
+      playerId: "p1",
+      seat: "p1",
+      difficulty: "easy"
+    });
+
+    await waitFor(() => {
+      const missionWindow = screen.getByTestId("mission-window");
+      const chatWindow = screen.getByTestId("chat-window");
+      expect(within(missionWindow).queryByText("Mission Briefing")).not.toBeInTheDocument();
+      expect(screen.getByTestId("mission-room-code")).toHaveTextContent("ABC123");
+      expect(within(missionWindow).getByText("Room ABC123 created. Waiting for opponent.")).toBeInTheDocument();
+      expect(within(chatWindow).getByRole("heading", { name: "Intercept Channel: ABC123" })).toBeInTheDocument();
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.GAME_STARTED, {
+      roundNumber: 1,
+      activePlayerId: "p1",
+      yourSecretFlag: "us",
+      availableFlagCodes: TEST_FLAGS,
+      yourBoardState: { eliminatedFlagCodes: [] }
+    });
+
+    await waitFor(() => {
+      const intelWindow = screen.getByTestId("intel-window");
+      const intelProgress = within(intelWindow).getByRole("progressbar", { name: "Intel gathered" });
+      const hiddenCountryPanel = within(intelWindow).getByTestId("hidden-country-panel");
+      const roundConsolePanel = within(intelWindow).getByTestId("round-console-panel");
+      expect(screen.queryByTestId("score-ribbon")).not.toBeInTheDocument();
+      expect(within(intelWindow).getByTestId("intel-round-overview")).toBeInTheDocument();
+      expect(within(intelWindow).getByTestId("turn-status")).toHaveTextContent(/YOUR TURN|OPPONENT TURN/i);
+      expect(within(intelWindow).queryByText("Active Agent")).not.toBeInTheDocument();
+      expect(within(intelWindow).queryByText("Round Result")).not.toBeInTheDocument();
+      expect(within(intelWindow).queryByText("Difficulty")).not.toBeInTheDocument();
+      expect(intelProgress).toHaveAttribute("aria-valuenow", "0");
+      expect(within(intelWindow).getByText("0 / 24 flags eliminated")).toBeInTheDocument();
+      expect(within(intelWindow).getByText("Uplink")).toBeInTheDocument();
+      expect(within(intelWindow).getByText("OFFLINE")).toBeInTheDocument();
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-iso")).toHaveTextContent("US");
+      expect(within(hiddenCountryPanel).getByRole("button", { name: "Expand hidden country details" })).toBeInTheDocument();
+      expect(within(roundConsolePanel).getByRole("button", { name: "Collapse Round Console" })).toHaveAttribute("aria-expanded", "true");
+      expect(within(intelWindow).getByRole("button", { name: "Minimize Intel Desk" })).toBeInTheDocument();
+    });
+  });
+
+  it("lets the round console collapse into its title bar and expand again", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const intelWindow = await screen.findByTestId("intel-window");
+    const roundConsolePanel = within(intelWindow).getByTestId("round-console-panel");
+
+    expect(within(roundConsolePanel).getByRole("button", { name: "Collapse Round Console" })).toBeInTheDocument();
+    expect(within(roundConsolePanel).getByRole("button", { name: "End Turn" })).toBeInTheDocument();
+
+    fireEvent.click(within(roundConsolePanel).getByRole("button", { name: "Collapse Round Console" }));
+
+    await waitFor(() => {
+      expect(within(roundConsolePanel).getByRole("button", { name: "Expand Round Console" })).toHaveAttribute("aria-expanded", "false");
+      expect(within(roundConsolePanel).queryByRole("button", { name: "End Turn" })).not.toBeInTheDocument();
+      expect(within(roundConsolePanel).queryByRole("button", { name: "Make Guess" })).not.toBeInTheDocument();
+    });
+
+    fireEvent.click(within(roundConsolePanel).getByRole("button", { name: "Expand Round Console" }));
+
+    await waitFor(() => {
+      expect(within(roundConsolePanel).getByRole("button", { name: "Collapse Round Console" })).toHaveAttribute("aria-expanded", "true");
+      expect(within(roundConsolePanel).getByRole("button", { name: "End Turn" })).toBeInTheDocument();
+    });
+  });
+
+  it("starts the hidden country panel collapsed and preserves manual expansion across new rounds", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const intelWindow = await screen.findByTestId("intel-window");
+    const initialIntelWidth = Number.parseInt(intelWindow.style.width, 10);
+
+    await waitFor(() => {
+      const hiddenCountryPanel = screen.getByTestId("hidden-country-panel");
+      expect(within(hiddenCountryPanel).getByRole("button", { name: "Expand hidden country details" })).toHaveAttribute("aria-expanded", "false");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "true");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-iso")).toHaveTextContent("US");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand hidden country details" }));
+
+    await waitFor(() => {
+      const hiddenCountryPanel = screen.getByTestId("hidden-country-panel");
+      expect(within(hiddenCountryPanel).getByRole("button", { name: "Collapse hidden country details" })).toHaveAttribute("aria-expanded", "true");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "false");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-summary")).toBeInTheDocument();
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-infobox")).toBeInTheDocument();
+      expect(within(hiddenCountryPanel).getByText("Country Summary")).toBeInTheDocument();
+      expect(within(hiddenCountryPanel).getByText("Capital")).toBeInTheDocument();
+      expect(Number.parseInt(screen.getByTestId("intel-window").style.width, 10)).toBeGreaterThan(initialIntelWidth);
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.NEW_GAME_STARTED, {
+      roundNumber: 2,
+      activePlayerId: "p1",
+      yourSecretFlag: "ca",
+      availableFlagCodes: TEST_FLAGS,
+      yourBoardState: { eliminatedFlagCodes: [] }
+    });
+
+    await waitFor(() => {
+      const hiddenCountryPanel = screen.getByTestId("hidden-country-panel");
+      expect(within(hiddenCountryPanel).getByRole("button", { name: "Collapse hidden country details" })).toBeInTheDocument();
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "false");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-iso")).toHaveTextContent("CA");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse hidden country details" }));
+
+    await waitFor(() => {
+      const hiddenCountryPanel = screen.getByTestId("hidden-country-panel");
+      expect(within(hiddenCountryPanel).getByRole("button", { name: "Expand hidden country details" })).toHaveAttribute("aria-expanded", "false");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "true");
+    });
+  });
+
+  it("lets desktop intel and chat windows collapse into title bars and expand again", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const intelWindow = await screen.findByTestId("intel-window");
+    const chatWindow = await screen.findByTestId("chat-window");
+
+    fireEvent.click(within(intelWindow).getByRole("button", { name: "Expand hidden country details" }));
+
+    await waitFor(() => {
+      const hiddenCountryPanel = within(screen.getByTestId("intel-window")).getByTestId("hidden-country-panel");
+      expect(within(hiddenCountryPanel).getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "false");
+    });
+
+    fireEvent.click(within(intelWindow).getByRole("button", { name: "Minimize Intel Desk" }));
+
+    await waitFor(() => {
+      expect(within(intelWindow).getByRole("button", { name: "Expand Intel Desk" })).toBeInTheDocument();
+      expect(within(intelWindow).queryByText("Intel Gathered")).not.toBeInTheDocument();
+      expect(intelWindow.className.includes("desktop-window-collapsed")).toBe(true);
+      expect(intelWindow.style.height).toBe("64px");
+    });
+
+    fireEvent.click(within(chatWindow).getByRole("button", { name: "Minimize Intercept Channel: ABC123" }));
+
+    await waitFor(() => {
+      expect(within(chatWindow).getByRole("button", { name: "Expand Intercept Channel: ABC123" })).toBeInTheDocument();
+      expect(within(chatWindow).queryByLabelText("Intercept composer")).not.toBeInTheDocument();
+      expect(chatWindow.className.includes("desktop-window-collapsed")).toBe(true);
+      expect(chatWindow.style.height).toBe("64px");
+    });
+
+    fireEvent.click(within(intelWindow).getByRole("button", { name: "Expand Intel Desk" }));
+    fireEvent.click(within(chatWindow).getByRole("button", { name: "Expand Intercept Channel: ABC123" }));
+
+    await waitFor(() => {
+      expect(within(intelWindow).getByRole("button", { name: "Minimize Intel Desk" })).toBeInTheDocument();
+      expect(within(intelWindow).getByText("Intel Gathered")).toBeInTheDocument();
+      expect(within(within(intelWindow).getByTestId("hidden-country-panel")).getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "false");
+      expect(within(chatWindow).getByRole("button", { name: "Minimize Intercept Channel: ABC123" })).toBeInTheDocument();
+      expect(within(chatWindow).getByLabelText("Intercept composer")).toBeInTheDocument();
+    });
+  });
+
+  it("opens a centered credits window with source-specific attribution links", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Credits" }));
+
+    const creditsDialog = await screen.findByRole("dialog", { name: "Credits" });
+    expect(within(creditsDialog).getByText("SimpleMaps Free World SVG Map")).toBeInTheDocument();
+    expect(within(creditsDialog).getByText("Flagcdn by Flagpedia")).toBeInTheDocument();
+    expect(within(creditsDialog).getByText("Wikipedia Contributors")).toBeInTheDocument();
+    expect(within(creditsDialog).getByText(/modified for gameplay metadata/i)).toBeInTheDocument();
+    expect(within(creditsDialog).getByRole("link", { name: "Wikimedia Commons flag sources" })).toHaveAttribute("href", "https://commons.wikimedia.org/wiki/Category:SVG_flags_by_country");
+    expect(within(creditsDialog).getByRole("link", { name: "SimpleMaps license" })).toHaveAttribute("href", "https://simplemaps.com/resources/svg-license");
+    expect(within(creditsDialog).getByRole("link", { name: "CC BY-SA 4.0 license" })).toHaveAttribute("href", "https://creativecommons.org/licenses/by-sa/4.0/");
+
+    fireEvent.click(within(creditsDialog).getByRole("button", { name: "Close" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "Credits" })).not.toBeInTheDocument();
+    });
   });
 
   it("shows the lobby window before game start, hides it during the match, and restores it after match over", async () => {
@@ -89,7 +290,31 @@ describe("App turn/state control gating", () => {
     expect(screen.queryByTestId("intel-window")).not.toBeInTheDocument();
     expect(screen.queryByTestId("chat-window")).not.toBeInTheDocument();
 
-    startAsPlayerOne();
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROOM_CREATED, {
+      roomCode: "ABC123",
+      playerId: "p1",
+      seat: "p1",
+      difficulty: "easy"
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mission-window")).toBeInTheDocument();
+      expect(screen.queryByTestId("intel-window")).not.toBeInTheDocument();
+      expect(screen.getByTestId("chat-window")).toBeInTheDocument();
+      expect(screen.getByText(/Intercept standby/i)).toBeInTheDocument();
+    });
+
+    expect(Number(screen.getByTestId("chat-window").style.zIndex)).toBeGreaterThan(
+      Number(screen.getByTestId("mission-window").style.zIndex)
+    );
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.GAME_STARTED, {
+      roundNumber: 1,
+      activePlayerId: "p1",
+      yourSecretFlag: "us",
+      availableFlagCodes: TEST_FLAGS,
+      yourBoardState: { eliminatedFlagCodes: [] }
+    });
 
     await waitFor(() => {
       expect(screen.queryByTestId("mission-window")).not.toBeInTheDocument();
@@ -97,6 +322,10 @@ describe("App turn/state control gating", () => {
       expect(screen.getByTestId("chat-window")).toBeInTheDocument();
       expect(screen.getByLabelText("Intercept composer")).toBeInTheDocument();
     });
+
+    expect(Number(screen.getByTestId("chat-window").style.zIndex)).toBeGreaterThan(
+      Number(screen.getByTestId("intel-window").style.zIndex)
+    );
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.MATCH_OVER, { winnerPlayerId: "p1" });
 
@@ -267,7 +496,82 @@ describe("App turn/state control gating", () => {
       const updatedUsCard = screen.getByAltText("US").closest("button") as HTMLButtonElement | null;
       expect(updatedUsCard).not.toBeNull();
       expect((updatedUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(true);
+      expect(screen.getByRole("progressbar", { name: "Intel gathered" })).toHaveAttribute("aria-valuenow", "4");
+      expect(screen.getByText("1 / 24 flags eliminated")).toBeInTheDocument();
     });
+  });
+
+  it("expands a compact map preview after sustained hover and removes it on leave", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const usButton = await screen.findByRole("button", { name: "US" });
+    const usMarker = usButton.closest(".map-flag-marker") as HTMLDivElement | null;
+    expect(usMarker).not.toBeNull();
+
+    vi.useFakeTimers();
+
+    fireEvent.mouseEnter(usMarker as HTMLDivElement);
+    expect(usButton.className.includes("map-flag-card-preview-active")).toBe(true);
+
+    act(() => {
+      vi.advanceTimersByTime(499);
+    });
+    expect(screen.queryByTestId("map-flag-preview")).not.toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByTestId("map-flag-preview")).toHaveTextContent("Capital");
+    expect(screen.getByTestId("map-flag-preview")).toHaveTextContent("Population");
+
+    fireEvent.mouseLeave(usMarker as HTMLDivElement);
+    expect(screen.queryByTestId("map-flag-preview")).not.toBeInTheDocument();
+  });
+
+  it("suppresses elimination on long press but still eliminates on short tap", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: "awaiting-asker-actions" });
+
+    const usButton = await screen.findByRole("button", { name: "US" });
+    const usMarker = usButton.closest(".map-flag-marker") as HTMLDivElement | null;
+    expect(usMarker).not.toBeNull();
+
+    const countEliminateEmits = () => mocked.socket.emits.filter((event) => event.event === CLIENT_TO_SERVER.ELIMINATE_FLAG).length;
+
+    vi.useFakeTimers();
+
+    fireEvent.touchStart(usMarker as HTMLDivElement, {
+      touches: [{ identifier: 1, clientX: 240, clientY: 240 }]
+    });
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByTestId("map-flag-preview")).toBeInTheDocument();
+
+    fireEvent.touchEnd(usMarker as HTMLDivElement, {
+      changedTouches: [{ identifier: 1, clientX: 240, clientY: 240 }]
+    });
+    fireEvent.click(usButton);
+    expect(countEliminateEmits()).toBe(0);
+    expect(screen.queryByTestId("map-flag-preview")).not.toBeInTheDocument();
+
+    fireEvent.touchStart(usMarker as HTMLDivElement, {
+      touches: [{ identifier: 1, clientX: 240, clientY: 240 }]
+    });
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    fireEvent.touchEnd(usMarker as HTMLDivElement, {
+      changedTouches: [{ identifier: 1, clientX: 240, clientY: 240 }]
+    });
+    fireEvent.click(usButton);
+
+    expect(countEliminateEmits()).toBe(1);
+    const eliminateEvents = mocked.socket.emits.filter((event) => event.event === CLIENT_TO_SERVER.ELIMINATE_FLAG);
+    expect(eliminateEvents[eliminateEvents.length - 1]?.payload).toEqual({ flagCode: "us" });
   });
 
   it("shows rematch only after match-over and emits new-game", async () => {
@@ -294,6 +598,10 @@ describe("App turn/state control gating", () => {
     render(<App />);
     startAsPlayerOne();
 
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ACCEPTED, {
+      question: "Is it in Europe?"
+    });
+
     mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ANSWERED, {
       question: "Is it in Europe?",
       answer: "no",
@@ -311,6 +619,45 @@ describe("App turn/state control gating", () => {
 
     await waitFor(() => {
       expect(screen.getByText("No active game room.")).toBeInTheDocument();
+    });
+  });
+
+  it("shows only your asked questions in the intel history table", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    const input = await screen.findByLabelText("Intercept composer");
+    fireEvent.change(input, { target: { value: "Is it in Europe?" } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask Question" }));
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ACCEPTED, {
+      question: "Is it in Europe?"
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ANSWERED, {
+      question: "Is it in Europe?",
+      answer: "yes",
+      answeredByPlayerId: "p2"
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.INCOMING_QUESTION, {
+      fromPlayerId: "p2",
+      question: "Is it north of the equator?"
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.QUESTION_ANSWERED, {
+      question: "Is it north of the equator?",
+      answer: "no",
+      answeredByPlayerId: "p1"
+    });
+
+    await waitFor(() => {
+      const historyTable = screen.getByRole("table", { name: "Question and answer history" });
+      expect(within(historyTable).getByRole("columnheader", { name: "Question" })).toBeInTheDocument();
+      expect(within(historyTable).getByRole("columnheader", { name: "Answer" })).toBeInTheDocument();
+      expect(within(historyTable).getByText("Is it in Europe?")).toBeInTheDocument();
+      expect(within(historyTable).getByText("YES")).toBeInTheDocument();
+      expect(within(historyTable).queryByText("Is it north of the equator?")).not.toBeInTheDocument();
     });
   });
 
@@ -449,7 +796,7 @@ describe("App turn/state control gating", () => {
     });
   });
 
-  it("renders the updated score ribbon when score changes arrive", async () => {
+  it("renders the updated intel round overview when score changes arrive", async () => {
     render(<App />);
     startAsPlayerOne();
 
@@ -462,11 +809,13 @@ describe("App turn/state control gating", () => {
       expect(screen.getByText(/First to\s*3\s*wins/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/RED\s+CELL/i)).toBeInTheDocument();
-    expect(screen.getByText(/BLUE\s+CELL/i)).toBeInTheDocument();
+    const intelRoundOverview = screen.getByTestId("intel-round-overview");
+    expect(screen.queryByTestId("score-ribbon")).not.toBeInTheDocument();
+    expect(within(intelRoundOverview).getByText(/RED\s+CELL/i)).toBeInTheDocument();
+    expect(within(intelRoundOverview).getByText(/BLUE\s+CELL/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      const selfScoreCard = screen.getByText(/RED\s+CELL/i).closest("article");
+      const selfScoreCard = within(intelRoundOverview).getByText(/RED\s+CELL/i).closest("article");
       expect(selfScoreCard?.className.includes("score-card-pulse")).toBe(true);
     });
   });

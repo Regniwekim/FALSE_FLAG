@@ -1,10 +1,10 @@
 import { test, expect, type BrowserContext, type Page, devices } from "@playwright/test";
 
 async function getRoomCode(page: Page): Promise<string> {
-  const roomLine = page.locator(".hero-meta .meta-pill").filter({ hasText: /^room /i }).first();
+  const roomLine = page.getByTestId("mission-room-code");
   await expect(roomLine).toBeVisible();
   for (let i = 0; i < 30; i += 1) {
-    const text = (await roomLine.innerText()).replace(/^room\s+/i, "").trim();
+    const text = (await roomLine.innerText()).trim();
     if (text && text.toLowerCase() !== "none") {
       return text;
     }
@@ -39,8 +39,19 @@ test("week 3 mobile portrait layout stays usable in active match", async ({ brow
   await mobilePage.getByRole("button", { name: "Join Room" }).click();
 
   await expectRoundNumber(mobilePage, 1);
-  await expect(mobilePage.getByTestId("score-ribbon")).toBeVisible();
-  await expect(mobilePage.getByText(/YOUR TURN|OPPONENT TURN/i)).toBeVisible();
+  await expect(mobilePage.getByTestId("score-ribbon")).toHaveCount(0);
+  await expect(mobilePage.getByTestId("intel-round-overview")).toBeVisible();
+  await expect(mobilePage.getByTestId("turn-status")).toContainText(/YOUR TURN|OPPONENT TURN/i);
+
+  const hiddenCountryPanel = mobilePage.getByTestId("hidden-country-panel");
+  await hiddenCountryPanel.scrollIntoViewIfNeeded();
+  await expect(hiddenCountryPanel).toBeVisible();
+  await expect(hiddenCountryPanel.getByTestId("hidden-country-iso")).toBeVisible();
+  await expect(hiddenCountryPanel.getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "true");
+  await hiddenCountryPanel.getByRole("button", { name: "Expand hidden country details" }).click();
+  await expect(hiddenCountryPanel.getByTestId("hidden-country-details")).toHaveAttribute("aria-hidden", "false");
+  await expect(hiddenCountryPanel.getByTestId("hidden-country-summary")).toBeVisible();
+  await expect(hiddenCountryPanel.getByTestId("hidden-country-infobox")).toBeVisible();
 
   const mapStage = mobilePage.getByTestId("map-canvas");
   await expect(mapStage).toBeVisible();

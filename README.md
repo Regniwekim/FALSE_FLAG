@@ -61,7 +61,9 @@ Useful implementation entry points:
 - [frontend/src/App.tsx](frontend/src/App.tsx)
 - [scripts/recalculate-flag-centroids.mjs](scripts/recalculate-flag-centroids.mjs)
 
-The map-marker pipeline reads [frontend/public/world-coordinates.svg](frontend/public/world-coordinates.svg), computes centroids, and writes marker positions into [frontend/src/world-map-marker-positions.ts](frontend/src/world-map-marker-positions.ts). The gameplay board itself renders [frontend/public/world.svg](frontend/public/world.svg).
+The map-marker pipeline reads [frontend/src/world-country-flag-anchors.json](frontend/src/world-country-flag-anchors.json), normalizes playable ISO codes, and writes marker positions into [frontend/src/world-map-marker-positions.ts](frontend/src/world-map-marker-positions.ts). The gameplay board itself renders [frontend/public/world.svg](frontend/public/world.svg).
+
+That same anchor JSON can also carry cached country metadata under each entry's `country_info` object. Run `npm run enrich:country-data` to refresh the checked-in Wikipedia summary and Wikidata facts without doing live lookups at runtime.
 
 ## Local development
 
@@ -102,6 +104,8 @@ From the repository root:
 | `npm run dev` | Start frontend and backend together |
 | `npm run typecheck` | Type-check `shared`, `backend`, and `frontend` |
 | `npm run build` | Build the whole workspace in dependency order |
+| `npm run enrich:country-data` | Fetch Wikipedia/Wikidata country metadata and write it into `frontend/src/world-country-flag-anchors.json` |
+| `npm run validate:flag-data` | Verify the generated flag catalog and marker positions still match the anchor JSON |
 | `npm run test` | Run backend Vitest suites |
 | `npm run test:frontend` | Run frontend Vitest suites |
 | `npm run test:e2e` | Run Playwright browser flows |
@@ -114,7 +118,9 @@ Useful package-level commands:
 | `npm run dev -w frontend` | Start only the Vite client |
 | `npm run dev -w backend` | Start only the backend with `tsx watch` |
 | `npm run build:prod -w frontend` | Optimize `public/world.svg` with SVGO, then build the frontend |
-| `node scripts/recalculate-flag-centroids.mjs --write` | Regenerate `shared/src/flags.ts` and `frontend/src/world-map-marker-positions.ts` from the coordinate SVG |
+| `node scripts/enrich-country-metadata.mjs --codes=AF,CZ,KP,KR,MK,PS,CG,BQ --write` | Refresh a focused subset of country metadata while iterating on resolver overrides |
+| `node scripts/recalculate-flag-centroids.mjs --check` | Validate generated outputs against `frontend/src/world-country-flag-anchors.json` |
+| `node scripts/recalculate-flag-centroids.mjs --write` | Regenerate `shared/src/flags.ts` and `frontend/src/world-map-marker-positions.ts` from the anchor JSON |
 
 ## Configuration
 
@@ -182,6 +188,6 @@ These are already reflected in the roadmap and codebase:
 
 ## Asset and data credits
 
-- The world map assets in [frontend/public/world.svg](frontend/public/world.svg) and [frontend/public/world-coordinates.svg](frontend/public/world-coordinates.svg) are based on the SimpleMaps Free World SVG Map: https://simplemaps.com/resources/svg-world
-- SimpleMaps SVG usage/license page: https://simplemaps.com/resources/svg-license
-- Flag thumbnails are loaded at runtime from `https://flagcdn.com` using the country-code catalog in [shared/src/flags.ts](shared/src/flags.ts)
+- The world map asset in [frontend/public/world.svg](frontend/public/world.svg) is based on the SimpleMaps Free World SVG Map. Source: https://simplemaps.com/resources/svg-world License: https://simplemaps.com/resources/svg-license
+- Flag thumbnails are loaded at runtime from Flagcdn by Flagpedia using the country-code catalog in [shared/src/flags.ts](shared/src/flags.ts). Service: https://flagcdn.com/ Project: https://flagpedia.net/ Source vectors: https://commons.wikimedia.org/wiki/Category:SVG_flags_by_country
+- Country metadata cached in [frontend/src/world-country-flag-anchors.json](frontend/src/world-country-flag-anchors.json) is adapted from Wikipedia contributors under CC BY-SA 4.0 and modified for gameplay metadata. Source: https://www.wikipedia.org/ License: https://creativecommons.org/licenses/by-sa/4.0/

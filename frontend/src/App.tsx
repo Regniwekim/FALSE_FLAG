@@ -29,6 +29,8 @@ import {
   playButtonClick
 } from "./audio";
 import { DesktopWindow } from "./desktop-window";
+import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-panel";
+import { IntelSubpanel } from "./intel-subpanel";
 import {
   DESKTOP_WINDOW_BREAKPOINT,
   DESKTOP_WINDOW_STORAGE_KEY,
@@ -58,6 +60,20 @@ type RoundRevealPhase = "hidden" | "impact" | "secrets" | "settled";
 
 type ScorePulseTarget = "self" | "opponent" | null;
 
+type MapFlagPreviewIntent = "hover" | "focus" | "touch";
+
+type MapFlagPreviewAlignment = "center" | "start" | "end";
+
+type MapFlagPreviewPlacement = "above" | "below";
+
+type CollapsedWindowsState = Record<"intel" | "chat", boolean>;
+
+type AskedQuestionHistoryEntry = {
+  id: number;
+  question: string;
+  answer: QuestionAnsweredPayload["answer"] | null;
+};
+
 const DEFAULT_FLAG_CODES = [...FULL_FLAG_CATALOG.slice(0, 24)];
 const DIFFICULTY_LABELS: Record<RoomDifficulty, string> = {
   easy: "Easy (24 countries)",
@@ -68,7 +84,41 @@ const DIFFICULTY_LABELS: Record<RoomDifficulty, string> = {
 
 const MAP_WIDTH = 2000;
 const MAP_HEIGHT = 857;
+const PRIME_MERIDIAN_X = MAP_WIDTH / 2;
+const EQUATOR_Y = MAP_HEIGHT / 2;
+const MAP_GRID_VERTICAL_STEP = MAP_WIDTH / 10;
+const MAP_GRID_HORIZONTAL_STEP = MAP_HEIGHT / 5;
 const CHAMPIONSHIP_TARGET_WINS = 3;
+const MAP_FLAG_PREVIEW_DELAY_MS = 500;
+const MAP_FLAG_PREVIEW_TOUCH_MOVE_TOLERANCE_PX = 12;
+
+function buildCenteredGridPositions(center: number, step: number, limit: number): number[] {
+  const positions = [Number(center.toFixed(1))];
+
+  for (let offset = step; center - offset > 0 || center + offset < limit; offset += step) {
+    const negative = Number((center - offset).toFixed(1));
+    const positive = Number((center + offset).toFixed(1));
+
+    if (negative > 0) {
+      positions.push(negative);
+    }
+
+    if (positive < limit) {
+      positions.push(positive);
+    }
+  }
+
+  return positions;
+}
+
+function formatMapGridCoordinate(coordinate: number): string {
+  return coordinate.toFixed(1).replace(/\.0$/, "");
+}
+
+const MAP_GRID_VERTICAL_POSITIONS = buildCenteredGridPositions(PRIME_MERIDIAN_X, MAP_GRID_VERTICAL_STEP, MAP_WIDTH);
+const MAP_GRID_HORIZONTAL_POSITIONS = buildCenteredGridPositions(EQUATOR_Y, MAP_GRID_HORIZONTAL_STEP, MAP_HEIGHT);
+const EXPANDED_HIDDEN_COUNTRY_INTEL_WIDTH = 820;
+const EXPANDED_HIDDEN_COUNTRY_INTEL_HEIGHT = 720;
 
 type ViewportSize = {
   width: number;
@@ -129,6 +179,55 @@ function formatDifficultyLabel(difficulty: RoomDifficulty): string {
   return DIFFICULTY_LABELS[difficulty];
 }
 
+function getMapFlagPreviewAlignment(marker: { x: number; y: number }): MapFlagPreviewAlignment {
+  if (marker.x < 180) {
+    return "start";
+  }
+
+  if (marker.x > MAP_WIDTH - 180) {
+    return "end";
+  }
+
+  return "center";
+}
+
+function getMapFlagPreviewPlacement(marker: { x: number; y: number }): MapFlagPreviewPlacement {
+  return marker.y < 170 ? "below" : "above";
+}
+
+function isMapFlagMarkerTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && Boolean(target.closest(".map-flag-marker"));
+}
+
+function appendAskedQuestionHistoryEntry(
+  history: AskedQuestionHistoryEntry[],
+  question: string,
+  nextEntryId: number
+): AskedQuestionHistoryEntry[] {
+  const lastEntry = history[history.length - 1];
+  if (lastEntry && lastEntry.question === question && lastEntry.answer === null) {
+    return history;
+  }
+
+  return [...history.slice(-7), { id: nextEntryId, question, answer: null }];
+}
+
+function resolveAskedQuestionHistoryAnswer(
+  history: AskedQuestionHistoryEntry[],
+  payload: QuestionAnsweredPayload
+): AskedQuestionHistoryEntry[] {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (entry.answer === null && entry.question === payload.question) {
+      const nextHistory = [...history];
+      nextHistory[index] = { ...entry, answer: payload.answer };
+      return nextHistory;
+    }
+  }
+
+  return history;
+}
+
 function fallbackMarkerForFlag(flagCode: string): { x: number; y: number } {
   let hash = 2166136261;
   for (const char of flagCode) {
@@ -153,7 +252,16 @@ type FlagMarkerProps = {
   marker: { x: number; y: number };
   isEliminated: boolean;
   canEliminate: boolean;
-  onEliminate: (flagCode: string) => void;
+  isPreviewActive: boolean;
+  isPreviewExpanded: boolean;
+  previewAlignment: MapFlagPreviewAlignment;
+  previewPlacement: MapFlagPreviewPlacement;
+  onMarkerClick: (flagCode: string) => void;
+  onPreviewStart: (flagCode: string, intent: MapFlagPreviewIntent) => void;
+  onPreviewEnd: (flagCode: string) => void;
+  onPreviewTouchMove: (flagCode: string, clientX: number, clientY: number) => void;
+  onPreviewTouchStart: (flagCode: string, clientX: number, clientY: number) => void;
+  onPreviewTouchEnd: (flagCode: string) => void;
 };
 
 const FlagMarker = memo(function FlagMarker({
@@ -161,54 +269,137 @@ const FlagMarker = memo(function FlagMarker({
   marker,
   isEliminated,
   canEliminate,
-  onEliminate
+  isPreviewActive,
+  isPreviewExpanded,
+  previewAlignment,
+  previewPlacement,
+  onMarkerClick,
+  onPreviewStart,
+  onPreviewEnd,
+  onPreviewTouchMove,
+  onPreviewTouchStart,
+  onPreviewTouchEnd
 }: FlagMarkerProps) {
+  const markerClassName = [
+    "map-flag-marker",
+    isPreviewActive ? "map-flag-marker-active" : "",
+    isPreviewExpanded ? "map-flag-marker-expanded" : "",
+    previewAlignment === "start" ? "map-flag-marker-preview-start" : "",
+    previewAlignment === "end" ? "map-flag-marker-preview-end" : "",
+    previewPlacement === "below" ? "map-flag-marker-preview-below" : ""
+  ].filter(Boolean).join(" ");
+  const buttonClassName = [
+    "flag-card",
+    "map-flag-card",
+    isEliminated ? "flag-card-eliminated" : "",
+    isPreviewActive ? "map-flag-card-preview-active" : "",
+    isPreviewExpanded ? "map-flag-card-preview-expanded" : ""
+  ].filter(Boolean).join(" ");
+
   return (
-    <button
-      className={isEliminated ? "flag-card map-flag-card flag-card-eliminated" : "flag-card map-flag-card"}
-      type="button"
-      aria-label={flagCode.toUpperCase()}
-      tabIndex={0}
+    <div
+      className={markerClassName}
+      data-flag-code={flagCode}
       style={{
         left: `${marker.x}px`,
         top: `${marker.y}px`,
         pointerEvents: "auto"
       } as CSSProperties}
-      onClick={() => {
-        onEliminate(flagCode);
+      onContextMenu={(event) => {
+        event.preventDefault();
       }}
-      disabled={!canEliminate}
+      onMouseDown={(event) => {
+        event.stopPropagation();
+      }}
+      onMouseEnter={() => {
+        onPreviewStart(flagCode, "hover");
+      }}
+      onMouseLeave={() => {
+        onPreviewEnd(flagCode);
+      }}
+      onTouchStart={(event) => {
+        event.stopPropagation();
+
+        if (event.touches.length !== 1) {
+          onPreviewEnd(flagCode);
+          return;
+        }
+
+        const touch = event.touches[0];
+        if (!touch) {
+          return;
+        }
+        onPreviewTouchStart(flagCode, touch.clientX, touch.clientY);
+      }}
+      onTouchMove={(event) => {
+        event.stopPropagation();
+
+        if (event.touches.length !== 1) {
+          onPreviewEnd(flagCode);
+          return;
+        }
+
+        const touch = event.touches[0];
+        if (!touch) {
+          return;
+        }
+        onPreviewTouchMove(flagCode, touch.clientX, touch.clientY);
+      }}
+      onTouchEnd={(event) => {
+        event.stopPropagation();
+        onPreviewTouchEnd(flagCode);
+      }}
+      onTouchCancel={(event) => {
+        event.stopPropagation();
+        onPreviewEnd(flagCode);
+      }}
     >
-      <img src={toFlagImage(flagCode)} alt={flagCode.toUpperCase()} loading="lazy" />
-      <span>{flagCode.toUpperCase()}</span>
-    </button>
+      <button
+        className={buttonClassName}
+        type="button"
+        aria-label={flagCode.toUpperCase()}
+        tabIndex={0}
+        onBlur={() => {
+          onPreviewEnd(flagCode);
+        }}
+        onClick={() => {
+          onMarkerClick(flagCode);
+        }}
+        onFocus={() => {
+          onPreviewStart(flagCode, "focus");
+        }}
+        disabled={!canEliminate}
+      >
+        <img src={toFlagImage(flagCode)} alt={flagCode.toUpperCase()} loading="lazy" />
+        <span>{flagCode.toUpperCase()}</span>
+      </button>
+
+      {isPreviewExpanded ? <CompactCountryInfobox flagCode={flagCode} dataTestId="map-flag-preview" /> : null}
+    </div>
   );
 }, (previousProps, nextProps) => {
   return previousProps.flagCode === nextProps.flagCode
     && previousProps.marker.x === nextProps.marker.x
     && previousProps.marker.y === nextProps.marker.y
     && previousProps.isEliminated === nextProps.isEliminated
-    && previousProps.canEliminate === nextProps.canEliminate;
+    && previousProps.canEliminate === nextProps.canEliminate
+    && previousProps.isPreviewActive === nextProps.isPreviewActive
+    && previousProps.isPreviewExpanded === nextProps.isPreviewExpanded
+    && previousProps.previewAlignment === nextProps.previewAlignment
+    && previousProps.previewPlacement === nextProps.previewPlacement;
 });
 
 function WorldMapBackdrop() {
   return (
-    <svg viewBox="0 0 2000 857" className="world-map-svg" aria-hidden="true" focusable="false">
-      <image className="map-source-image" href="/world.svg" x="0" y="0" width="2000" height="857" />
+    <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} className="world-map-svg" aria-hidden="true" focusable="false">
+      <image className="map-source-image" href="/world.svg" x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} />
       <g className="map-grid">
-        <path d="M200 0v857" />
-        <path d="M400 0v857" />
-        <path d="M600 0v857" />
-        <path d="M800 0v857" />
-        <path d="M1000 0v857" />
-        <path d="M1200 0v857" />
-        <path d="M1400 0v857" />
-        <path d="M1600 0v857" />
-        <path d="M1800 0v857" />
-        <path d="M0 171h2000" />
-        <path d="M0 343h2000" />
-        <path d="M0 515h2000" />
-        <path d="M0 686h2000" />
+        {MAP_GRID_VERTICAL_POSITIONS.map((coordinate) => (
+          <path key={`grid-v-${coordinate}`} d={`M${formatMapGridCoordinate(coordinate)} 0v${MAP_HEIGHT}`} />
+        ))}
+        {MAP_GRID_HORIZONTAL_POSITIONS.map((coordinate) => (
+          <path key={`grid-h-${coordinate}`} d={`M0 ${formatMapGridCoordinate(coordinate)}h${MAP_WIDTH}`} />
+        ))}
       </g>
     </svg>
   );
@@ -229,7 +420,7 @@ export function App() {
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [incomingQuestion, setIncomingQuestion] = useState<string | null>(null);
-  const [lastAnswered, setLastAnswered] = useState<QuestionAnsweredPayload | null>(null);
+  const [askedQuestionHistory, setAskedQuestionHistory] = useState<AskedQuestionHistoryEntry[]>([]);
   const [eliminatedCodes, setEliminatedCodes] = useState<string[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessageEventPayload[]>([]);
   const [roundResult, setRoundResult] = useState<RoundOverPayload | null>(null);
@@ -240,6 +431,7 @@ export function App() {
   const [isGuessPickerOpen, setIsGuessPickerOpen] = useState(false);
   const [isGuessModalOpen, setIsGuessModalOpen] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  const [isCreditsModalOpen, setIsCreditsModalOpen] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
   const [toastMessages, setToastMessages] = useState<ToastMessage[]>([]);
   const [pendingQuestionText, setPendingQuestionText] = useState<string | null>(null);
@@ -254,17 +446,27 @@ export function App() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState(initialMapPan);
   const [isPanning, setIsPanning] = useState(false);
+  const [previewedFlagCode, setPreviewedFlagCode] = useState<string | null>(null);
+  const [expandedPreviewFlagCode, setExpandedPreviewFlagCode] = useState<string | null>(null);
+  const [isHiddenCountryExpanded, setIsHiddenCountryExpanded] = useState(false);
+  const [isRoundConsoleExpanded, setIsRoundConsoleExpanded] = useState(true);
   const [desktopWindows, setDesktopWindows] = useState(() => loadPersistedDesktopWindows(initialViewportSize.width, initialViewportSize.height));
+  const [collapsedWindows, setCollapsedWindows] = useState<CollapsedWindowsState>({ intel: false, chat: false });
   const flagMarkerPositions: FlagMarkerPositions = WORLD_MAP_MARKER_POSITIONS;
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const guessModalRef = useRef<HTMLDivElement | null>(null);
   const rulesModalRef = useRef<HTMLDivElement | null>(null);
+  const creditsModalRef = useRef<HTMLDivElement | null>(null);
   const guessPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const guessPickerOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const guessPickerTypeaheadRef = useRef("");
   const guessPickerTypeaheadTimerRef = useRef<number | null>(null);
   const panStartRef = useRef({ x: 0, y: 0 });
+  const isPanningRef = useRef(false);
+  const mapFlagPreviewTimerRef = useRef<number | null>(null);
+  const mapFlagTouchPressRef = useRef<{ flagCode: string; clientX: number; clientY: number } | null>(null);
+  const suppressNextMapFlagClickRef = useRef<string | null>(null);
   const pinchDistanceRef = useRef<number | null>(null);
   const inviteStatusTimerRef = useRef<number | null>(null);
   const toastTimersRef = useRef<number[]>([]);
@@ -275,6 +477,7 @@ export function App() {
   const toastIdRef = useRef(0);
   const playerIdRef = useRef<string | null>(null);
   const pendingQuestionRef = useRef<string | null>(null);
+  const askedQuestionHistoryIdRef = useRef(0);
   const scoreRef = useRef<Record<string, number>>({});
   const zoomRef = useRef(1);
   const panRef = useRef(initialMapPan);
@@ -475,6 +678,14 @@ export function App() {
       pushToast("Reconnect failed. Refresh or create a new room.", "error");
     };
 
+    const surfaceDesktopWindow = (windowId: DesktopWindowId) => {
+      const nextViewportSize = getViewportSize();
+      setDesktopWindows((currentWindows) => raiseDesktopWindow(
+        normalizeDesktopWindows(currentWindows, nextViewportSize.width, nextViewportSize.height),
+        windowId
+      ));
+    };
+
     const manager = socket.io;
 
     socket.on("connect", onConnect);
@@ -489,6 +700,7 @@ export function App() {
       setSeat(payload.seat);
       setRoomCode(payload.roomCode);
       setRoomDifficulty(payload.difficulty);
+      surfaceDesktopWindow("chat");
       setStatus(`Room ${payload.roomCode} created. Waiting for opponent.`);
       pushToast(`Room ${payload.roomCode} is live. Waiting for rival.`, "success");
     });
@@ -499,6 +711,7 @@ export function App() {
       setSeat(payload.seat);
       setRoomCode(payload.roomCode);
       setRoomDifficulty(payload.difficulty);
+      surfaceDesktopWindow("chat");
       setStatus(`Joined room ${payload.roomCode}. Starting game...`);
       pushToast(`Joined room ${payload.roomCode}. Syncing mission.`, "success");
     });
@@ -507,8 +720,10 @@ export function App() {
       setGameInfo(payload);
       setTurnState("awaiting-question");
       setEliminatedCodes(payload.yourBoardState.eliminatedFlagCodes);
+      surfaceDesktopWindow("chat");
       setIncomingQuestion(null);
-      setLastAnswered(null);
+      setAskedQuestionHistory([]);
+      askedQuestionHistoryIdRef.current = 0;
       setRoundResult(null);
       setMatchWinnerId(null);
       setIsRoundTransitioning(false);
@@ -530,8 +745,10 @@ export function App() {
       setGameInfo(payload);
       setTurnState("awaiting-question");
       setEliminatedCodes(payload.yourBoardState.eliminatedFlagCodes);
+      surfaceDesktopWindow("chat");
       setIncomingQuestion(null);
-      setLastAnswered(null);
+      setAskedQuestionHistory([]);
+      askedQuestionHistoryIdRef.current = 0;
       setRoundResult(null);
       setScore({});
       setMatchWinnerId(null);
@@ -560,6 +777,8 @@ export function App() {
 
     socket.on(SERVER_TO_CLIENT.QUESTION_ACCEPTED, (payload: QuestionAcceptedPayload) => {
       setPendingQuestionText(null);
+      askedQuestionHistoryIdRef.current += 1;
+      setAskedQuestionHistory((history) => appendAskedQuestionHistoryEntry(history, payload.question, askedQuestionHistoryIdRef.current));
       pushToast(`Question accepted: ${payload.question}`, "success");
     });
 
@@ -582,7 +801,7 @@ export function App() {
     });
 
     socket.on(SERVER_TO_CLIENT.QUESTION_ANSWERED, (payload: QuestionAnsweredPayload) => {
-      setLastAnswered(payload);
+      setAskedQuestionHistory((history) => resolveAskedQuestionHistoryAnswer(history, payload));
       setIncomingQuestion(null);
       if (payload.answeredByPlayerId === playerIdRef.current) {
         pushToast(`Answer sent: ${payload.answer.toUpperCase()}.`, "success");
@@ -906,6 +1125,69 @@ export function App() {
   }, [isRulesModalOpen]);
 
   useEffect(() => {
+    if (!isCreditsModalOpen) {
+      return;
+    }
+
+    const modal = creditsModalRef.current;
+    if (!modal) {
+      return;
+    }
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const getFocusableElements = () => Array.from(
+      modal.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      )
+    );
+
+    window.setTimeout(() => {
+      const focusable = getFocusableElements();
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsCreditsModalOpen(false);
+        previouslyFocused?.focus();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+        return;
+      }
+
+      if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isCreditsModalOpen]);
+
+  useEffect(() => {
     if (!chatListRef.current) {
       return;
     }
@@ -1000,7 +1282,18 @@ export function App() {
 
   const openRulesModal = () => {
     playButtonClick();
+    setIsCreditsModalOpen(false);
     setIsRulesModalOpen(true);
+  };
+
+  const closeCreditsModal = () => {
+    setIsCreditsModalOpen(false);
+  };
+
+  const openCreditsModal = () => {
+    playButtonClick();
+    setIsRulesModalOpen(false);
+    setIsCreditsModalOpen(true);
   };
 
   const startFreshRoom = () => {
@@ -1049,10 +1342,78 @@ export function App() {
     }
   };
 
+  const clearMapFlagPreviewTimer = useCallback(() => {
+    if (mapFlagPreviewTimerRef.current !== null) {
+      window.clearTimeout(mapFlagPreviewTimerRef.current);
+      mapFlagPreviewTimerRef.current = null;
+    }
+  }, []);
+
+  const beginMapFlagPreview = useCallback((flagCode: string, intent: MapFlagPreviewIntent) => {
+    clearMapFlagPreviewTimer();
+    setPreviewedFlagCode(flagCode);
+    setExpandedPreviewFlagCode((currentFlagCode) => currentFlagCode === flagCode ? currentFlagCode : null);
+    mapFlagPreviewTimerRef.current = window.setTimeout(() => {
+      setExpandedPreviewFlagCode(flagCode);
+      if (intent === "touch") {
+        suppressNextMapFlagClickRef.current = flagCode;
+      }
+      mapFlagPreviewTimerRef.current = null;
+    }, MAP_FLAG_PREVIEW_DELAY_MS);
+  }, [clearMapFlagPreviewTimer]);
+
+  const endMapFlagPreview = useCallback((flagCode?: string) => {
+    clearMapFlagPreviewTimer();
+    setPreviewedFlagCode((currentFlagCode) => !flagCode || currentFlagCode === flagCode ? null : currentFlagCode);
+    setExpandedPreviewFlagCode((currentFlagCode) => !flagCode || currentFlagCode === flagCode ? null : currentFlagCode);
+
+    if (!flagCode || mapFlagTouchPressRef.current?.flagCode === flagCode) {
+      mapFlagTouchPressRef.current = null;
+    }
+  }, [clearMapFlagPreviewTimer]);
+
+  const handleMapFlagPreviewTouchStart = useCallback((flagCode: string, clientX: number, clientY: number) => {
+    mapFlagTouchPressRef.current = { flagCode, clientX, clientY };
+    suppressNextMapFlagClickRef.current = null;
+    beginMapFlagPreview(flagCode, "touch");
+  }, [beginMapFlagPreview]);
+
+  const handleMapFlagPreviewTouchMove = useCallback((flagCode: string, clientX: number, clientY: number) => {
+    const activeTouchPress = mapFlagTouchPressRef.current;
+    if (!activeTouchPress || activeTouchPress.flagCode !== flagCode) {
+      return;
+    }
+
+    if (Math.hypot(clientX - activeTouchPress.clientX, clientY - activeTouchPress.clientY) > MAP_FLAG_PREVIEW_TOUCH_MOVE_TOLERANCE_PX) {
+      endMapFlagPreview(flagCode);
+    }
+  }, [endMapFlagPreview]);
+
+  const handleMapFlagPreviewTouchEnd = useCallback((flagCode: string) => {
+    endMapFlagPreview(flagCode);
+  }, [endMapFlagPreview]);
+
+  const handleMapFlagMarkerClick = useCallback((flagCode: string) => {
+    if (suppressNextMapFlagClickRef.current === flagCode) {
+      suppressNextMapFlagClickRef.current = null;
+      endMapFlagPreview(flagCode);
+      return;
+    }
+
+    endMapFlagPreview(flagCode);
+    eliminateFlag(flagCode);
+  }, [eliminateFlag, endMapFlagPreview]);
+
   const clampPanY = (candidateY: number, zoomLevel: number): number => {
     const viewportHeight = mapViewportRef.current?.clientHeight ?? viewportSize.height;
     return clampMapPanY(candidateY, zoomLevel, viewportHeight);
   };
+
+  useEffect(() => {
+    return () => {
+      clearMapFlagPreviewTimer();
+    };
+  }, [clearMapFlagPreviewTimer]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -1090,7 +1451,7 @@ export function App() {
     }
 
     const onWheel = (event: WheelEvent) => {
-      if (!event.altKey) {
+      if (!event.ctrlKey) {
         return;
       }
 
@@ -1117,15 +1478,16 @@ export function App() {
   }, []);
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target instanceof HTMLElement && event.target.closest("button")) {
+    if (isMapFlagMarkerTarget(event.target)) {
       return;
     }
+    isPanningRef.current = true;
     setIsPanning(true);
     panStartRef.current = { x: event.clientX - panRef.current.x, y: event.clientY - panRef.current.y };
   };
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPanning) {
+    if (!isPanningRef.current) {
       return;
     }
     scheduleViewportState(zoomRef.current, {
@@ -1135,10 +1497,15 @@ export function App() {
   };
 
   const handleMouseUp = () => {
+    isPanningRef.current = false;
     setIsPanning(false);
   };
 
   const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (isMapFlagMarkerTarget(event.target)) {
+      return;
+    }
+
     if (event.touches.length === 2) {
       const [touchA, touchB] = [event.touches[0], event.touches[1]];
       pinchDistanceRef.current = Math.hypot(touchB.clientX - touchA.clientX, touchB.clientY - touchA.clientY);
@@ -1146,6 +1513,7 @@ export function App() {
     }
 
     if (event.touches.length === 1) {
+      isPanningRef.current = true;
       setIsPanning(true);
       panStartRef.current = {
         x: event.touches[0].clientX - panRef.current.x,
@@ -1169,7 +1537,7 @@ export function App() {
       return;
     }
 
-    if (event.touches.length === 1 && isPanning) {
+    if (event.touches.length === 1 && isPanningRef.current) {
       scheduleViewportState(zoomRef.current, {
         x: event.touches[0].clientX - panStartRef.current.x,
         y: clampPanY(event.touches[0].clientY - panStartRef.current.y, zoomRef.current)
@@ -1181,6 +1549,7 @@ export function App() {
     if (pinchDistanceRef.current) {
       pinchDistanceRef.current = null;
     }
+    isPanningRef.current = false;
     setIsPanning(false);
   };
 
@@ -1203,6 +1572,10 @@ export function App() {
   const tileOffsets = (import.meta.env.MODE === "test" ? [0] : [-1, 0, 1]).map((offset) => offset * MAP_WIDTH);
 
   const remainingFlags = activeFlagCodes.filter((flagCode) => !eliminatedCodes.includes(flagCode));
+  const intelGatheredRatio = activeFlagCodes.length > 0
+    ? Math.min(1, eliminatedCodes.length / activeFlagCodes.length)
+    : 0;
+  const intelGatheredPercent = Math.round(intelGatheredRatio * 100);
   const guessOptions = remainingFlags.length > 0 ? remainingFlags : activeFlagCodes;
   const guessPickerMenuId = "guess-flag-options";
   const selectedGuessIndex = Math.max(0, guessOptions.indexOf(guessFlagCode));
@@ -1359,21 +1732,18 @@ export function App() {
         ? "ROUND COMPLETE"
         : "OPPONENT TURN";
   const turnBannerClassName = isYourTurn ? "turn-banner turn-banner-active" : "turn-banner";
-  const currentMissionLabel = roomCode ? `operation-${roomCode.toLowerCase()}` : "operation-pending";
   const nextRoundCountdownLabel = nextRoundCountdownMs !== null
     ? `${Math.max(0.1, nextRoundCountdownMs / 1000).toFixed(1)}s`
     : null;
-  const currentRoundResultLabel = roundResult ? formatRoundReason(roundResult.reason) : "pending";
+  const askedQuestionHistoryRows = [...askedQuestionHistory].reverse();
   const areSecretsVisible = roundRevealPhase === "secrets" || roundRevealPhase === "settled";
+  const isInRoom = Boolean(roomCode && playerId);
   const hasGameStarted = Boolean(gameInfo);
   const shouldShowMissionWindow = !hasGameStarted || Boolean(matchWinnerId);
-  const shouldShowOpsWindows = hasGameStarted;
+  const shouldShowIntelWindow = hasGameStarted;
+  const shouldShowChatWindow = isInRoom;
+  const uplinkStatusLabel = connected ? "ONLINE" : "OFFLINE";
   const isDesktopWindowing = viewportSize.width >= DESKTOP_WINDOW_BREAKPOINT;
-  const heroPanelClassName = connected
-    ? /Reconnecting|Unable/.test(status)
-      ? "panel panel-wide hero-panel hero-panel-warning"
-      : "panel panel-wide hero-panel"
-    : "panel panel-wide hero-panel hero-panel-offline";
   const resultCardClassName = roundResult
     ? roundResult.winnerPlayerId === playerId
       ? `result-card result-card-success result-card-phase-${roundRevealPhase}`
@@ -1414,6 +1784,17 @@ export function App() {
   ].filter(Boolean).join(" ");
   const mapCanvasClassName = isPanning ? "map-stage map-stage-canvas map-stage-panning" : "map-stage map-stage-canvas";
 
+  useEffect(() => {
+    const activePreviewFlagCode = previewedFlagCode ?? expandedPreviewFlagCode;
+    if (!activePreviewFlagCode) {
+      return;
+    }
+
+    if (!activeFlagCodes.includes(activePreviewFlagCode) || eliminatedCodes.includes(activePreviewFlagCode)) {
+      endMapFlagPreview(activePreviewFlagCode);
+    }
+  }, [activeFlagCodes, eliminatedCodes, endMapFlagPreview, expandedPreviewFlagCode, previewedFlagCode]);
+
   const focusDesktopWindow = useCallback((windowId: DesktopWindowId) => {
     setDesktopWindows((currentWindows) => raiseDesktopWindow(currentWindows, windowId));
   }, []);
@@ -1423,6 +1804,52 @@ export function App() {
       updateDesktopWindowLayout(currentWindows, windowId, nextLayout, viewportSize.width, viewportSize.height)
     ));
   }, [viewportSize.height, viewportSize.width]);
+
+  const toggleDesktopWindowCollapsed = useCallback((windowId: DesktopWindowId) => {
+    if (windowId === "mission") {
+      return;
+    }
+
+    setCollapsedWindows((currentWindows) => ({
+      ...currentWindows,
+      [windowId]: !currentWindows[windowId]
+    }));
+    setDesktopWindows((currentWindows) => raiseDesktopWindow(currentWindows, windowId));
+  }, []);
+
+  const toggleHiddenCountryExpanded = useCallback(() => {
+    playButtonClick();
+    setIsHiddenCountryExpanded((currentValue) => {
+      const nextValue = !currentValue;
+
+      if (nextValue && isDesktopWindowing) {
+        setDesktopWindows((currentWindows) => {
+          const intelLayout = currentWindows.intel;
+          return raiseDesktopWindow(
+            updateDesktopWindowLayout(
+              currentWindows,
+              "intel",
+              {
+                ...intelLayout,
+                width: Math.max(intelLayout.width, EXPANDED_HIDDEN_COUNTRY_INTEL_WIDTH),
+                height: Math.max(intelLayout.height, EXPANDED_HIDDEN_COUNTRY_INTEL_HEIGHT)
+              },
+              viewportSize.width,
+              viewportSize.height
+            ),
+            "intel"
+          );
+        });
+      }
+
+      return nextValue;
+    });
+  }, [isDesktopWindowing, viewportSize.height, viewportSize.width]);
+
+  const toggleRoundConsoleExpanded = useCallback(() => {
+    playButtonClick();
+    setIsRoundConsoleExpanded((currentValue) => !currentValue);
+  }, []);
 
   const missionConsoleContent = (
     <div className="desktop-panel-content">
@@ -1461,6 +1888,12 @@ export function App() {
           Copy Invite Link
         </button>
       </div>
+      <div className="mission-console-footer" aria-live="polite">
+        <p className="mission-console-room">
+          Room <strong data-testid="mission-room-code">{roomCode ?? "none"}</strong>
+        </p>
+        <p className="mission-console-status">{status}</p>
+      </div>
       {inviteStatus ? <p className="invite-status">{inviteStatus}</p> : null}
     </div>
   );
@@ -1471,30 +1904,59 @@ export function App() {
         <p>Waiting for game start...</p>
       ) : (
         <>
-          <div className="secret-slot secret-slot-featured">
-            <div>
-              <span className="slot-label">Your Hidden Location</span>
-              <strong>{gameInfo.yourSecretFlag.toUpperCase()}</strong>
+          <section className="score-ribbon intel-round-overview" data-testid="intel-round-overview">
+            <article className={yourScoreCardClassName}>
+              <span className="score-label">{yourSideLabel} CELL</span>
+              <strong>{yourScore}</strong>
+              <span className="score-name">{lobby.displayName || "You"}</span>
+            </article>
+
+            <div className="score-center intel-round-center">
+              <p className={turnBannerClassName} data-testid="turn-status">{turnBannerText}</p>
+              <p className="score-subtitle" data-testid="round-status">
+                Round {gameInfo.roundNumber} · First to {CHAMPIONSHIP_TARGET_WINS} wins
+              </p>
+              {isRoundTransitioning && !matchWinnerId ? (
+                <p className="round-transition-banner" data-testid="round-transition-banner" aria-live="polite">
+                  {nextRoundCountdownLabel ? `NEXT ROUND IN ${nextRoundCountdownLabel}` : "NEXT ROUND INITIALIZING..."}
+                </p>
+              ) : null}
             </div>
-            <img src={toFlagImage(gameInfo.yourSecretFlag)} alt={`${gameInfo.yourSecretFlag.toUpperCase()} secret flag`} loading="lazy" />
-          </div>
+
+            <article className={opponentScoreCardClassName}>
+              <span className="score-label">{opponentSideLabel} CELL</span>
+              <strong>{opponentScore}</strong>
+              <span className="score-name">Opponent</span>
+            </article>
+          </section>
+
+          <HiddenCountryPanel
+            flagCode={gameInfo.yourSecretFlag}
+            isExpanded={isHiddenCountryExpanded}
+            onToggleExpanded={toggleHiddenCountryExpanded}
+          />
 
           <div className="round-detail-grid">
+            <article className="detail-card intel-progress-card">
+              <span className="slot-label">Intel Gathered</span>
+              <strong className="intel-progress-value">{intelGatheredPercent}%</strong>
+              <div
+                className="intel-progress-track"
+                role="progressbar"
+                aria-label="Intel gathered"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={intelGatheredPercent}
+              >
+                <span className="intel-progress-fill" style={{ width: `${intelGatheredPercent}%` }} />
+              </div>
+              <span className="intel-progress-caption">
+                {eliminatedCodes.length} / {activeFlagCodes.length} flags eliminated
+              </span>
+            </article>
             <div className="detail-card">
-              <span className="slot-label">Active Agent</span>
-              <strong className="active-agent-value">{gameInfo.activePlayerId}</strong>
-            </div>
-            <div className="detail-card">
-              <span className="slot-label">Confirmed Intel</span>
-              <strong>{yourScore}</strong>
-            </div>
-            <div className="detail-card">
-              <span className="slot-label">Interrogation Round</span>
-              <strong>{gameInfo.roundNumber}</strong>
-            </div>
-            <div className="detail-card">
-              <span className="slot-label">Difficulty</span>
-              <strong>{roomDifficulty.toUpperCase()}</strong>
+              <span className="slot-label">Uplink</span>
+              <strong className="detail-value">{uplinkStatusLabel}</strong>
             </div>
             <div className="detail-card">
               <span className="slot-label">Operation State</span>
@@ -1502,25 +1964,50 @@ export function App() {
             </div>
           </div>
 
-          <div className="intel-ops-grid">
-            <section className="intel-command-panel">
-              <p className="intel-section-label">{matchWinnerId ? "Match Console" : "Round Console"}</p>
-
-              {lastAnswered ? (
-                <p className="event-strip">
-                  <span>Last Q and A: {lastAnswered.question}</span>
-                  <span className={lastAnswered.answer === "yes" ? "answer-badge answer-badge-yes" : "answer-badge answer-badge-no"}>
-                    {lastAnswered.answer.toUpperCase()}
-                  </span>
-                </p>
+          <IntelSubpanel
+            title={matchWinnerId ? "Match Console" : "Round Console"}
+            isExpanded={isRoundConsoleExpanded}
+            onToggleExpanded={toggleRoundConsoleExpanded}
+            dataTestId="round-console-panel"
+          >
+            <div className="intel-command-panel">
+              {askedQuestionHistoryRows.length > 0 ? (
+                <div className="intel-history-wrap">
+                  <table className="intel-history-table" aria-label="Question and answer history">
+                    <thead>
+                      <tr>
+                        <th scope="col">Question</th>
+                        <th scope="col">Answer</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {askedQuestionHistoryRows.map((entry) => (
+                        <tr key={entry.id}>
+                          <td>{entry.question}</td>
+                          <td className="intel-history-answer-cell">
+                            <span
+                              className={entry.answer === null
+                                ? "answer-badge answer-badge-pending"
+                                : entry.answer === "yes"
+                                  ? "answer-badge answer-badge-yes"
+                                  : "answer-badge answer-badge-no"}
+                            >
+                              {entry.answer ? entry.answer.toUpperCase() : "PENDING"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
-                <p className="intel-empty-line">No confirmed Q and A yet.</p>
+                <p className="intel-empty-line">Only your accepted questions appear here.</p>
               )}
 
               {matchWinnerId ? (
                 <p className="intel-empty-line">Round controls are locked. Use rematch or start a fresh room below.</p>
               ) : (
-                <>
+                <section className="intel-action-panel" aria-label="Round actions">
                   {pendingGuessCode || recentlyConfirmedFlagCode ? (
                     <div className="feedback-chip-row" aria-live="polite">
                       {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
@@ -1528,29 +2015,14 @@ export function App() {
                     </div>
                   ) : null}
 
-                  <div className="controls controls-stack action-row intel-action-row">
-                    <button onClick={endTurn} disabled={!canEndTurn}>End Turn</button>
-                    <button onClick={openGuessModal} disabled={!canGuess}>Make Guess</button>
+                  <div className="intel-action-grid">
+                    <button className="intel-action-button intel-action-button-secondary" onClick={endTurn} disabled={!canEndTurn}>End Turn</button>
+                    <button className="intel-action-button intel-action-button-primary" onClick={openGuessModal} disabled={!canGuess}>Make Guess</button>
                   </div>
-                </>
+                </section>
               )}
-            </section>
-
-            <div className="intel-status-grid">
-              <article className="detail-card intel-status-card">
-                <span className="slot-label">Current Phase</span>
-                <strong>{formatTurnState(turnState)}</strong>
-              </article>
-              <article className="detail-card intel-status-card">
-                <span className="slot-label">Eliminated</span>
-                <strong>{eliminatedCodes.length}</strong>
-              </article>
-              <article className="detail-card intel-status-card">
-                <span className="slot-label">Round Result</span>
-                <strong>{currentRoundResultLabel}</strong>
-              </article>
             </div>
-          </div>
+          </IntelSubpanel>
 
           {roundResult ? (
             <div className={resultCardClassName}>
@@ -1580,6 +2052,7 @@ export function App() {
               </div>
             </div>
           ) : null}
+
         </>
       )}
     </div>
@@ -1587,6 +2060,13 @@ export function App() {
 
   const chatWindowContent = (
     <div className="desktop-panel-content desktop-panel-content-chat">
+      {!gameInfo ? (
+        <div className="incoming-card">
+          <p className="incoming-label">Intercept standby</p>
+          <p className="section-subtitle">Room is live. The channel unlocks fully when the second player joins.</p>
+        </div>
+      ) : null}
+
       {incomingQuestion ? (
         <div className="incoming-card incoming-card-alert">
           <p className="incoming-label">Incoming interrogation</p>
@@ -1662,6 +2142,8 @@ export function App() {
     </div>
   );
 
+  const interceptChannelTitle = roomCode ? `Intercept Channel: ${roomCode}` : "Intercept Channel";
+
   return (
     <main className="app-shell">
       <div className="app-canvas-noise" aria-hidden="true" />
@@ -1699,7 +2181,16 @@ export function App() {
                 marker={marker}
                 isEliminated={eliminatedCodes.includes(flagCode)}
                 canEliminate={canEliminate}
-                onEliminate={eliminateFlag}
+                isPreviewActive={previewedFlagCode === flagCode}
+                isPreviewExpanded={expandedPreviewFlagCode === flagCode}
+                previewAlignment={getMapFlagPreviewAlignment(marker)}
+                previewPlacement={getMapFlagPreviewPlacement(marker)}
+                onMarkerClick={handleMapFlagMarkerClick}
+                onPreviewEnd={endMapFlagPreview}
+                onPreviewStart={beginMapFlagPreview}
+                onPreviewTouchEnd={handleMapFlagPreviewTouchEnd}
+                onPreviewTouchMove={handleMapFlagPreviewTouchMove}
+                onPreviewTouchStart={handleMapFlagPreviewTouchStart}
               />
             );
           })}
@@ -1708,26 +2199,13 @@ export function App() {
 
       <div className="app-chrome">
         <div className="hud-shell">
-          <header className={heroPanelClassName}>
+          <header className="panel panel-wide hero-panel">
             <div>
-              <p className="eyebrow">Week 3 Build In Progress</p>
               <h1>.FALSE_FLAG//Global Signal</h1>
-              <p className="status">{status}</p>
             </div>
-            <div className="hero-right-column">
-              <div className="hero-actions">
-                <button type="button" onClick={openRulesModal}>How to Play</button>
-              </div>
-              <div className="hero-meta">
-                <span className={connected ? "meta-pill meta-pill-online" : "meta-pill"}>
-                  uplink {connected ? "online" : "offline"}
-                </span>
-                <span className="meta-pill">mission {currentMissionLabel}</span>
-                <span className="meta-pill">difficulty {roomDifficulty}</span>
-                <span className="meta-pill">room {roomCode ?? "none"}</span>
-                <span className="meta-pill">cell {seat ?? "pending"}</span>
-                <span className="meta-pill">agent {playerId ?? "pending"}</span>
-              </div>
+            <div className="hero-actions">
+              <button type="button" onClick={openRulesModal}>How to Play</button>
+              <button type="button" onClick={openCreditsModal}>Credits</button>
             </div>
           </header>
 
@@ -1738,39 +2216,13 @@ export function App() {
               ))}
             </div>
           ) : null}
-
-          <section className="panel panel-wide score-ribbon hud-score-ribbon" data-testid="score-ribbon">
-            <article className={yourScoreCardClassName}>
-              <span className="score-label">{yourSideLabel} CELL</span>
-              <strong>{yourScore}</strong>
-              <span className="score-name">{lobby.displayName || "You"}</span>
-            </article>
-
-            <div className="score-center">
-              <p className={turnBannerClassName}>{turnBannerText}</p>
-              <p className="score-subtitle" data-testid="round-status">
-                Round {gameInfo?.roundNumber ?? "-"} · First to {CHAMPIONSHIP_TARGET_WINS} wins
-              </p>
-              {isRoundTransitioning && !matchWinnerId ? (
-                <p className="round-transition-banner" data-testid="round-transition-banner" aria-live="polite">
-                  {nextRoundCountdownLabel ? `NEXT ROUND IN ${nextRoundCountdownLabel}` : "NEXT ROUND INITIALIZING..."}
-                </p>
-              ) : null}
-            </div>
-
-            <article className={opponentScoreCardClassName}>
-              <span className="score-label">{opponentSideLabel} CELL</span>
-              <strong>{opponentScore}</strong>
-              <span className="score-name">Opponent</span>
-            </article>
-          </section>
         </div>
 
         <section className="map-hud" data-testid="map-hud">
           <div className="map-hud-copy">
             <p className="desktop-window-kicker">atlas.kernel::world-grid</p>
             <h2>World Signal Grid</h2>
-            <p className="section-subtitle">Hold Alt and scroll to zoom. Drag exposed canvas to pan. Move windows to uncover markers.</p>
+            <p className="section-subtitle">Hold Ctrl and scroll to zoom. Drag exposed canvas to pan. Move windows to uncover markers.</p>
           </div>
           <div className="map-hud-toolbar">
             <p className="board-meta" data-testid="candidate-count">{remainingFlags.length} candidate locations remaining</p>
@@ -1803,32 +2255,38 @@ export function App() {
             </DesktopWindow>
           ) : null}
 
-          {shouldShowOpsWindows ? (
+          {shouldShowIntelWindow ? (
             <DesktopWindow
               windowId="intel"
               title="Intel Desk"
               subtitle="round telemetry, questioning, reveal sequence, and strike controls"
               layout={desktopWindows.intel}
               interactive={isDesktopWindowing}
+              canCollapse={isDesktopWindowing}
+              isCollapsed={collapsedWindows.intel}
               className="round-panel intel-window"
               dataTestId="intel-window"
               onFocus={focusDesktopWindow}
+              onToggleCollapsed={toggleDesktopWindowCollapsed}
               onLayoutChange={handleDesktopWindowLayoutChange}
             >
               {intelDeskContent}
             </DesktopWindow>
           ) : null}
 
-          {shouldShowOpsWindows ? (
+          {shouldShowChatWindow ? (
             <DesktopWindow
               windowId="chat"
-              title="Intercept Channel"
+              title={interceptChannelTitle}
               subtitle="questions, answers, and field chatter"
               layout={desktopWindows.chat}
               interactive={isDesktopWindowing}
+              canCollapse={isDesktopWindowing}
+              isCollapsed={collapsedWindows.chat}
               className="chat-panel chat-window"
               dataTestId="chat-window"
               onFocus={focusDesktopWindow}
+              onToggleCollapsed={toggleDesktopWindowCollapsed}
               onLayoutChange={handleDesktopWindowLayoutChange}
             >
               {chatWindowContent}
@@ -1933,7 +2391,7 @@ export function App() {
               <ul>
                 <li>Click a flag card on the map to eliminate it.</li>
                 <li>Drag to pan the map.</li>
-                <li>Use Alt + mouse wheel (or pinch on touch devices) to zoom.</li>
+                <li>Use Ctrl + mouse wheel (or pinch on touch devices) to zoom.</li>
                 <li>Use the + / o / - buttons to zoom in, reset, and zoom out.</li>
               </ul>
 
@@ -1953,6 +2411,58 @@ export function App() {
             </div>
             <div className="controls controls-stack modal-actions">
               <button onClick={closeRulesModal}>Close</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isCreditsModalOpen ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeCreditsModal();
+            }
+          }}
+        >
+          <div ref={creditsModalRef} className="guess-modal credits-modal" role="dialog" aria-modal="true" aria-labelledby="credits-modal-title">
+            <h2 id="credits-modal-title">Credits</h2>
+            <p className="section-subtitle">Source acknowledgements for the map, flag imagery, and country data used by FALSE_FLAG.</p>
+            <div className="credits-modal-content">
+              <section className="credits-resource">
+                <p className="credits-resource-label">SVG World Map</p>
+                <h3>SimpleMaps Free World SVG Map</h3>
+                <p>The world backdrop is based on the SimpleMaps Free World SVG Map.</p>
+                <div className="credits-resource-links">
+                  <a href="https://simplemaps.com/resources/svg-world" target="_blank" rel="noreferrer">SimpleMaps map source</a>
+                  <a href="https://simplemaps.com/resources/svg-license" target="_blank" rel="noreferrer">SimpleMaps license</a>
+                </div>
+              </section>
+
+              <section className="credits-resource">
+                <p className="credits-resource-label">Flag Images</p>
+                <h3>Flagcdn by Flagpedia</h3>
+                <p>Flag thumbnails are loaded at runtime from Flagcdn, the free service created by Flagpedia.net.</p>
+                <div className="credits-resource-links">
+                  <a href="https://flagcdn.com/" target="_blank" rel="noreferrer">Flagcdn</a>
+                  <a href="https://flagpedia.net/" target="_blank" rel="noreferrer">Flagpedia</a>
+                  <a href="https://commons.wikimedia.org/wiki/Category:SVG_flags_by_country" target="_blank" rel="noreferrer">Wikimedia Commons flag sources</a>
+                </div>
+              </section>
+
+              <section className="credits-resource">
+                <p className="credits-resource-label">Country Information</p>
+                <h3>Wikipedia Contributors</h3>
+                <p>Country metadata is adapted from Wikipedia contributors under CC BY-SA 4.0 and modified for gameplay metadata.</p>
+                <div className="credits-resource-links">
+                  <a href="https://www.wikipedia.org/" target="_blank" rel="noreferrer">Wikipedia</a>
+                  <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noreferrer">CC BY-SA 4.0 license</a>
+                </div>
+              </section>
+            </div>
+            <div className="controls controls-stack modal-actions">
+              <button onClick={closeCreditsModal}>Close</button>
             </div>
           </div>
         </div>

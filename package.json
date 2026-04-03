@@ -11,6 +11,8 @@
     "dev": "concurrently -n FRONTEND,BACKEND -c cyan,magenta \"npm run dev -w frontend\" \"npm run dev -w backend\"",
     "build": "npm run build -w shared && npm run build -w backend && npm run build -w frontend",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w backend && npm run typecheck -w frontend",
+    "enrich:country-data": "node scripts/enrich-country-metadata.mjs --write",
+    "validate:flag-data": "node scripts/recalculate-flag-centroids.mjs --check",
     "test": "npm run test -w backend",
     "test:frontend": "npm run test -w frontend",
     "test:e2e": "playwright test",
