@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+﻿import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import {
   CLIENT_TO_SERVER,
   SERVER_TO_CLIENT,
@@ -21,6 +21,7 @@ import {
   playCorrectGuess,
   playWrongGuess
 } from "./audio";
+import { WORLD_MAP_MARKER_POSITIONS, type FlagMarkerPositions } from "./world-map-marker-positions";
 
 type LobbyState = {
   roomCodeInput: string;
@@ -36,67 +37,6 @@ const FLAG_CODES = [
 
 const MAP_WIDTH = 2000;
 const MAP_HEIGHT = 857;
-type FlagMarkerPositions = Record<string, { x: number; y: number }>;
-
-const FALLBACK_FLAG_MARKER_POSITIONS: FlagMarkerPositions = {
-  us: { x: 455, y: 243 },
-  ca: { x: 411, y: 162 },
-  mx: { x: 433, y: 319 },
-  cu: { x: 603, y: 301 },
-  br: { x: 694, y: 476 },
-  ar: { x: 644, y: 610 },
-  co: { x: 585, y: 438 },
-  pe: { x: 565, y: 516 },
-  gb: { x: 983, y: 166 },
-  fr: { x: 1011, y: 210 },
-  de: { x: 1056, y: 186 },
-  it: { x: 1069, y: 226 },
-  za: { x: 1133, y: 571 },
-  ng: { x: 1008, y: 394 },
-  eg: { x: 1142, y: 313 },
-  ke: { x: 1188, y: 462 },
-  cn: { x: 1572, y: 262 },
-  in: { x: 1433, y: 324 },
-  jp: { x: 1767, y: 257 },
-  kr: { x: 1711, y: 257 },
-  au: { x: 1739, y: 548 },
-  nz: { x: 1967, y: 624 },
-  tr: { x: 1194, y: 243 },
-  sa: { x: 1262, y: 355 }
-};
-
-const COUNTRY_GEOMETRY_SELECTORS: Record<string, string[]> = {
-  us: [
-    '[id="US"]',
-    '[name="United States of America"]',
-    '[name="United States"]',
-    '[class~="United"][class~="States"]'
-  ],
-  ca: ['[id="CA"]', '[name="Canada"]', '[class~="Canada"]'],
-  mx: ['[id="MX"]', '[name="Mexico"]', '[class~="Mexico"]'],
-  cu: ['[id="CU"]', '[name="Cuba"]', '[class~="Cuba"]'],
-  br: ['[id="BR"]', '[name="Brazil"]', '[class~="Brazil"]'],
-  ar: ['[id="AR"]', '[name="Argentina"]', '[class~="Argentina"]'],
-  co: ['[id="CO"]', '[name="Colombia"]', '[class~="Colombia"]'],
-  pe: ['[id="PE"]', '[name="Peru"]', '[class~="Peru"]'],
-  gb: ['[id="GB"]', '[name="United Kingdom"]', '[class~="United"][class~="Kingdom"]'],
-  fr: ['[id="FR"]', '[name="France"]', '[class~="France"]'],
-  de: ['[id="DE"]', '[name="Germany"]', '[class~="Germany"]'],
-  it: ['[id="IT"]', '[name="Italy"]', '[class~="Italy"]'],
-  za: ['[id="ZA"]', '[name="South Africa"]', '[class~="South"][class~="Africa"]'],
-  ng: ['[id="NG"]', '[name="Nigeria"]', '[class~="Nigeria"]'],
-  eg: ['[id="EG"]', '[name="Egypt"]', '[class~="Egypt"]'],
-  ke: ['[id="KE"]', '[name="Kenya"]', '[class~="Kenya"]'],
-  cn: ['[id="CN"]', '[name="China"]', '[class~="China"]'],
-  in: ['[id="IN"]', '[name="India"]', '[class~="India"]'],
-  jp: ['[id="JP"]', '[name="Japan"]', '[class~="Japan"]'],
-  kr: ['[id="KR"]', '[name="Republic of Korea"]', '[name="South Korea"]', '[class~="Korea"]'],
-  au: ['[id="AU"]', '[name="Australia"]', '[class~="Australia"]'],
-  nz: ['[id="NZ"]', '[name="New Zealand"]', '[class~="New"][class~="Zealand"]'],
-  tr: ['[id="TR"]', '[name="Turkey"]', '[name="TÃ¼rkiye"]', '[class~="Turkey"]'],
-  sa: ['[id="SA"]', '[name="Saudi Arabia"]', '[class~="Saudi"][class~="Arabia"]']
-};
-
 const CHAMPIONSHIP_TARGET_WINS = 3;
 
 function toFlagImage(flagCode: string): string {
@@ -111,20 +51,54 @@ function formatRoundReason(reason: RoundOverPayload["reason"]): string {
   return reason === "correct-guess" ? "Correct guess" : "Wrong guess";
 }
 
+type FlagMarkerProps = {
+  flagCode: string;
+  marker: { x: number; y: number };
+  isEliminated: boolean;
+  canEliminate: boolean;
+  onEliminate: (flagCode: string) => void;
+};
+
+const FlagMarker = memo(function FlagMarker({
+  flagCode,
+  marker,
+  isEliminated,
+  canEliminate,
+  onEliminate
+}: FlagMarkerProps) {
+  return (
+    <button
+      className={isEliminated ? "flag-card map-flag-card flag-card-eliminated" : "flag-card map-flag-card"}
+      type="button"
+      aria-label={flagCode.toUpperCase()}
+      tabIndex={0}
+      style={{
+        left: `${marker.x}px`,
+        top: `${marker.y}px`,
+        pointerEvents: "auto"
+      } as CSSProperties}
+      onClick={() => {
+        onEliminate(flagCode);
+      }}
+      disabled={!canEliminate}
+    >
+      <img src={toFlagImage(flagCode)} alt={flagCode.toUpperCase()} loading="lazy" />
+      <span>{flagCode.toUpperCase()}</span>
+    </button>
+  );
+}, (previousProps, nextProps) => {
+  return previousProps.flagCode === nextProps.flagCode
+    && previousProps.marker.x === nextProps.marker.x
+    && previousProps.marker.y === nextProps.marker.y
+    && previousProps.isEliminated === nextProps.isEliminated
+    && previousProps.canEliminate === nextProps.canEliminate;
+});
+
 function WorldMapBackdrop() {
   return (
     <svg viewBox="0 0 2000 857" className="world-map-svg" aria-hidden="true" focusable="false">
-      <defs>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-          <feMerge>
-            <feMergeNode in="coloredBlur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
       <image className="map-source-image" href="/world.svg" x="0" y="0" width="2000" height="857" />
-      <g className="map-grid" filter="url(#glow)">
+      <g className="map-grid">
         <path d="M200 0v857" />
         <path d="M400 0v857" />
         <path d="M600 0v857" />
@@ -169,7 +143,7 @@ export function App() {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const [flagMarkerPositions, setFlagMarkerPositions] = useState<FlagMarkerPositions>({ ...FALLBACK_FLAG_MARKER_POSITIONS });
+  const flagMarkerPositions: FlagMarkerPositions = WORLD_MAP_MARKER_POSITIONS;
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const guessModalRef = useRef<HTMLDivElement | null>(null);
@@ -180,124 +154,47 @@ export function App() {
   const panStartRef = useRef({ x: 0, y: 0 });
   const pinchDistanceRef = useRef<number | null>(null);
   const inviteStatusTimerRef = useRef<number | null>(null);
+  const zoomRef = useRef(1);
+  const panRef = useRef({ x: 0, y: 0 });
+  const pendingViewportStateRef = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
+  const viewportFrameRef = useRef<number | null>(null);
 
   const patchGameInfo = (patch: Partial<GameStartedPayload>) => {
     setGameInfo((current) => (current ? { ...current, ...patch } : current));
   };
 
-  useEffect(() => {
-    let didCancel = false;
+  const applyViewportState = (nextZoom: number, nextPan: { x: number; y: number }) => {
+    zoomRef.current = nextZoom;
+    panRef.current = nextPan;
+    setZoom(nextZoom);
+    setPan(nextPan);
+  };
 
-    const resolveMarkerCentroids = async () => {
-      try {
-        const response = await fetch("/world.svg");
-        if (!response.ok) {
-          return;
-        }
+  const scheduleViewportState = (nextZoom: number, nextPan: { x: number; y: number }) => {
+    pendingViewportStateRef.current = { zoom: nextZoom, pan: nextPan };
 
-        const svgText = await response.text();
-        const parser = new DOMParser();
-        const parsed = parser.parseFromString(svgText, "image/svg+xml");
-        const sourceSvg = parsed.querySelector("svg");
-        if (!sourceSvg) {
-          return;
-        }
+    if (viewportFrameRef.current !== null) {
+      return;
+    }
 
-        const mount = document.createElement("div");
-        mount.style.position = "absolute";
-        mount.style.left = "-10000px";
-        mount.style.top = "-10000px";
-        mount.style.width = "0";
-        mount.style.height = "0";
-        mount.style.overflow = "hidden";
+    viewportFrameRef.current = window.requestAnimationFrame(() => {
+      viewportFrameRef.current = null;
+      const pendingViewportState = pendingViewportStateRef.current;
+      pendingViewportStateRef.current = null;
 
-        const renderSvg = document.importNode(sourceSvg, true) as SVGSVGElement;
-        mount.appendChild(renderSvg);
-        document.body.appendChild(mount);
-
-        const nextPositions: FlagMarkerPositions = { ...FALLBACK_FLAG_MARKER_POSITIONS };
-
-        for (const flagCode of FLAG_CODES) {
-          const selectors = COUNTRY_GEOMETRY_SELECTORS[flagCode] ?? [];
-          const shapeSet = new Set<SVGGraphicsElement>();
-
-          for (const selector of selectors) {
-            renderSvg.querySelectorAll(selector).forEach((node) => {
-              if (node instanceof SVGGraphicsElement) {
-                shapeSet.add(node);
-              }
-            });
-          }
-
-          if (shapeSet.size === 0) {
-            continue;
-          }
-
-          let minX = Number.POSITIVE_INFINITY;
-          let minY = Number.POSITIVE_INFINITY;
-          let maxX = Number.NEGATIVE_INFINITY;
-          let maxY = Number.NEGATIVE_INFINITY;
-
-          shapeSet.forEach((shape) => {
-            const box = shape.getBBox();
-            minX = Math.min(minX, box.x);
-            minY = Math.min(minY, box.y);
-            maxX = Math.max(maxX, box.x + box.width);
-            maxY = Math.max(maxY, box.y + box.height);
-          });
-
-          if (Number.isFinite(minX) && Number.isFinite(minY) && Number.isFinite(maxX) && Number.isFinite(maxY)) {
-            const samplingStep = 3;
-            let sumX = 0;
-            let sumY = 0;
-            let sampleCount = 0;
-
-            for (let sampleY = minY; sampleY <= maxY; sampleY += samplingStep) {
-              for (let sampleX = minX; sampleX <= maxX; sampleX += samplingStep) {
-                const point = new DOMPoint(sampleX, sampleY);
-                const isInside = Array.from(shapeSet).some((shape) => {
-                  if (!(shape instanceof SVGGeometryElement)) {
-                    return false;
-                  }
-                  return shape.isPointInFill(point);
-                });
-
-                if (isInside) {
-                  sumX += sampleX;
-                  sumY += sampleY;
-                  sampleCount += 1;
-                }
-              }
-            }
-
-            if (sampleCount > 0) {
-              nextPositions[flagCode] = {
-                x: sumX / sampleCount,
-                y: sumY / sampleCount
-              };
-            } else {
-              nextPositions[flagCode] = {
-                x: (minX + maxX) / 2,
-                y: (minY + maxY) / 2
-              };
-            }
-          }
-        }
-
-        mount.remove();
-
-        if (!didCancel) {
-          setFlagMarkerPositions(nextPositions);
-        }
-      } catch {
-        // Keep fallback marker positions when SVG parsing fails.
+      if (!pendingViewportState) {
+        return;
       }
-    };
 
-    void resolveMarkerCentroids();
+      applyViewportState(pendingViewportState.zoom, pendingViewportState.pan);
+    });
+  };
 
+  useEffect(() => {
     return () => {
-      didCancel = true;
+      if (viewportFrameRef.current !== null) {
+        window.cancelAnimationFrame(viewportFrameRef.current);
+      }
     };
   }, []);
 
@@ -743,37 +640,37 @@ export function App() {
       const rect = viewport.getBoundingClientRect();
       const offsetX = event.clientX - rect.left;
       const offsetY = event.clientY - rect.top;
-      const nextZoom = Math.max(1, Math.min(4, zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
-      const scaleRatio = nextZoom / zoom;
+      const currentViewportState = pendingViewportStateRef.current ?? { zoom: zoomRef.current, pan: panRef.current };
+      const nextZoom = Math.max(1, Math.min(4, currentViewportState.zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+      const scaleRatio = nextZoom / currentViewportState.zoom;
 
-      const nextPanX = offsetX - (offsetX - pan.x) * scaleRatio;
-      const nextPanY = clampPanY(offsetY - (offsetY - pan.y) * scaleRatio, nextZoom);
+      const nextPanX = offsetX - (offsetX - currentViewportState.pan.x) * scaleRatio;
+      const nextPanY = clampPanY(offsetY - (offsetY - currentViewportState.pan.y) * scaleRatio, nextZoom);
 
-      setZoom(nextZoom);
-      setPan({ x: nextPanX, y: nextPanY });
+      scheduleViewportState(nextZoom, { x: nextPanX, y: nextPanY });
     };
 
     viewport.addEventListener("wheel", onWheel, { passive: false });
     return () => {
       viewport.removeEventListener("wheel", onWheel);
     };
-  }, [pan.x, pan.y, zoom]);
+  }, []);
 
   const handleMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (event.target instanceof HTMLElement && event.target.closest("button")) {
       return;
     }
     setIsPanning(true);
-    panStartRef.current = { x: event.clientX - pan.x, y: event.clientY - pan.y };
+    panStartRef.current = { x: event.clientX - panRef.current.x, y: event.clientY - panRef.current.y };
   };
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!isPanning) {
       return;
     }
-    setPan({
+    scheduleViewportState(zoomRef.current, {
       x: event.clientX - panStartRef.current.x,
-      y: clampPanY(event.clientY - panStartRef.current.y, zoom)
+      y: clampPanY(event.clientY - panStartRef.current.y, zoomRef.current)
     });
   };
 
@@ -791,8 +688,8 @@ export function App() {
     if (event.touches.length === 1) {
       setIsPanning(true);
       panStartRef.current = {
-        x: event.touches[0].clientX - pan.x,
-        y: event.touches[0].clientY - pan.y
+        x: event.touches[0].clientX - panRef.current.x,
+        y: event.touches[0].clientY - panRef.current.y
       };
     }
   };
@@ -802,17 +699,20 @@ export function App() {
       event.preventDefault();
       const [touchA, touchB] = [event.touches[0], event.touches[1]];
       const nextDistance = Math.hypot(touchB.clientX - touchA.clientX, touchB.clientY - touchA.clientY);
-      const nextZoom = Math.max(1, Math.min(4, zoom * (nextDistance / pinchDistanceRef.current)));
-      setZoom(nextZoom);
-      setPan((current) => ({ ...current, y: clampPanY(current.y, nextZoom) }));
+      const currentViewportState = pendingViewportStateRef.current ?? { zoom: zoomRef.current, pan: panRef.current };
+      const nextZoom = Math.max(1, Math.min(4, currentViewportState.zoom * (nextDistance / pinchDistanceRef.current)));
+      scheduleViewportState(nextZoom, {
+        ...currentViewportState.pan,
+        y: clampPanY(currentViewportState.pan.y, nextZoom)
+      });
       pinchDistanceRef.current = nextDistance;
       return;
     }
 
     if (event.touches.length === 1 && isPanning) {
-      setPan({
+      scheduleViewportState(zoomRef.current, {
         x: event.touches[0].clientX - panStartRef.current.x,
-        y: clampPanY(event.touches[0].clientY - panStartRef.current.y, zoom)
+        y: clampPanY(event.touches[0].clientY - panStartRef.current.y, zoomRef.current)
       });
     }
   };
@@ -825,20 +725,17 @@ export function App() {
   };
 
   const zoomIn = () => {
-    const nextZoom = Math.min(4, zoom + 0.2);
-    setZoom(nextZoom);
-    setPan((current) => ({ ...current, y: clampPanY(current.y, nextZoom) }));
+    const nextZoom = Math.min(4, zoomRef.current + 0.2);
+    applyViewportState(nextZoom, { ...panRef.current, y: clampPanY(panRef.current.y, nextZoom) });
   };
 
   const zoomOut = () => {
-    const nextZoom = Math.max(1, zoom - 0.2);
-    setZoom(nextZoom);
-    setPan((current) => ({ ...current, y: clampPanY(current.y, nextZoom) }));
+    const nextZoom = Math.max(1, zoomRef.current - 0.2);
+    applyViewportState(nextZoom, { ...panRef.current, y: clampPanY(panRef.current.y, nextZoom) });
   };
 
   const resetMapView = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+    applyViewportState(1, { x: 0, y: 0 });
   };
 
   const tileSpan = MAP_WIDTH * zoom;
@@ -1235,7 +1132,10 @@ export function App() {
         >
           <div
             className="map-world-layer"
-            style={{ transform: `translate(${wrappedPanX}px, ${pan.y}px) scale(${zoom})` }}
+            style={{
+              transform: `translate(${wrappedPanX}px, ${pan.y}px) scale(${zoom})`,
+              "--marker-scale": `${1 / zoom}`
+            } as CSSProperties}
           >
             {tileOffsets.map((tileOffset) => (
               <div key={tileOffset} className="map-tile" style={{ left: `${tileOffset}px` }}>
@@ -1245,26 +1145,14 @@ export function App() {
             {FLAG_CODES.map((flagCode) => {
               const marker = flagMarkerPositions[flagCode];
               return (
-                <button
+                <FlagMarker
                   key={`${flagCode}-marker`}
-                  className={eliminatedCodes.includes(flagCode) ? "flag-card map-flag-card flag-card-eliminated" : "flag-card map-flag-card"}
-                  type="button"
-                  aria-label={flagCode.toUpperCase()}
-                  tabIndex={0}
-                  style={{
-                    left: `${marker.x}px`,
-                    top: `${marker.y}px`,
-                    "--marker-scale": `${1 / zoom}`,
-                    pointerEvents: "auto"
-                  } as CSSProperties}
-                  onClick={() => {
-                    eliminateFlag(flagCode);
-                  }}
-                  disabled={!canEliminate}
-                >
-                  <img src={toFlagImage(flagCode)} alt={flagCode.toUpperCase()} loading="lazy" />
-                  <span>{flagCode.toUpperCase()}</span>
-                </button>
+                  flagCode={flagCode}
+                  marker={marker}
+                  isEliminated={eliminatedCodes.includes(flagCode)}
+                  canEliminate={canEliminate}
+                  onEliminate={eliminateFlag}
+                />
               );
             })}
           </div>

@@ -433,7 +433,7 @@ button:disabled {
   position: absolute;
   inset: 0;
   transform-origin: top left;
-  transition: transform 140ms ease-out;
+  will-change: transform;
 }
 
 
@@ -452,7 +452,7 @@ button:disabled {
 }
 
 .map-source-image {
-  filter: drop-shadow(0 0 4px #00f0ff88) drop-shadow(0 0 12px #00f0ff44);
+  filter: drop-shadow(0 0 6px #00f0ff55);
 }
 
 .world-map-svg path,
@@ -475,6 +475,7 @@ button:disabled {
 .map-grid path {
   stroke: #00F0FF55;
   stroke-width: 1;
+  filter: none;
 }
 
 .flag-card {
@@ -500,6 +501,7 @@ button:disabled {
   transform-origin: bottom center;
   z-index: 1;
   transition: box-shadow 120ms ease-out;
+  contain: layout paint style;
 }
 
 .map-flag-card::after {
@@ -513,7 +515,6 @@ button:disabled {
   border-left: 7px solid transparent;
   border-right: 7px solid transparent;
   border-top: 12px solid #00F0FF;
-  filter: drop-shadow(0 0 6px #00f0ffcc);
   pointer-events: none;
 }
 
@@ -574,7 +575,16 @@ button:disabled {
 
 .flag-card-eliminated::after {
   border-top-color: #9D4EDD;
-  filter: drop-shadow(0 0 4px #9d4eddcc);
+}
+
+@media (max-width: 768px) {
+  .map-source-image {
+    filter: none;
+  }
+
+  .map-flag-card {
+    width: 72px;
+  }
 }
 
 .chat-list {

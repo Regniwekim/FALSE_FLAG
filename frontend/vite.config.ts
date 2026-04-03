@@ -1,8 +1,17 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import viteCompression from "vite-plugin-compression";
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    viteCompression({
+      algorithm: "brotliCompress",
+      ext: ".br",
+      threshold: 10240,
+      deleteOriginFile: false
+    })
+  ],
   server: {
     host: "0.0.0.0",
     port: 5173,
