@@ -129,6 +129,16 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await expectRoundNumber(page, 1);
   await expectRoundNumber(page2, 1);
 
+  const toggledFlagLabel = await clickFirstUncoveredMarker(page2);
+  const toggledLocalMarker = page2.getByTestId("map-canvas").locator(`.map-flag-card[aria-label="${toggledFlagLabel}"]`).first();
+  const toggledRemoteMarker = page.getByTestId("map-canvas").locator(`.map-flag-card[aria-label="${toggledFlagLabel}"]`).first();
+  await expect(toggledLocalMarker).toHaveClass(/flag-card-eliminated/);
+  await expect(toggledRemoteMarker).not.toHaveClass(/flag-card-eliminated/);
+
+  await toggledLocalMarker.click();
+  await expect(toggledLocalMarker).not.toHaveClass(/flag-card-eliminated/);
+  await expect(toggledRemoteMarker).not.toHaveClass(/flag-card-eliminated/);
+
   await page.getByLabel("Intercept composer").fill("Is it in Europe?");
   await expect(page.getByRole("button", { name: "Ask Question" })).toBeEnabled();
   await page.getByRole("button", { name: "Ask Question" }).click();

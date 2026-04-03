@@ -48,7 +48,7 @@ describe("Week 2 socket handlers", () => {
     }
   });
 
-  it("rejects eliminate in invalid state and broadcasts chat", async () => {
+  it("rejects board edits in round-over and still broadcasts chat", async () => {
     running = await startServer(0);
     const url = `http://localhost:${running.port}`;
 
@@ -65,11 +65,17 @@ describe("Week 2 socket handlers", () => {
     const p1GameStartedPromise = waitForEvent<GameStartedPayload>(p1, SERVER_TO_CLIENT.GAME_STARTED);
     const p2GameStartedPromise = waitForEvent<GameStartedPayload>(p2, SERVER_TO_CLIENT.GAME_STARTED);
     p2.emit(CLIENT_TO_SERVER.JOIN_ROOM, { roomCode: roomCreated.roomCode, displayName: "P2" } satisfies JoinRoomPayload);
-    await Promise.all([p1GameStartedPromise, p2GameStartedPromise]);
+    const [p1Started] = await Promise.all([p1GameStartedPromise, p2GameStartedPromise]);
 
-    const invalidEliminate = waitForEvent<ActionErrorPayload>(p1, SERVER_TO_CLIENT.ACTION_ERROR);
-    p1.emit(CLIENT_TO_SERVER.ELIMINATE_FLAG, { flagCode: "us" });
-    expect((await invalidEliminate).code).toBe("INVALID_STATE");
+    const roundOver = waitForEvent(p1, SERVER_TO_CLIENT.ROUND_OVER);
+    p1.emit(CLIENT_TO_SERVER.MAKE_GUESS, {
+      guessedFlagCode: p1Started.availableFlagCodes[0]
+    });
+    await roundOver;
+
+    const invalidBoardEdit = waitForEvent<ActionErrorPayload>(p1, SERVER_TO_CLIENT.ACTION_ERROR);
+    p1.emit(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, { flagCode: "us", eliminated: true });
+    expect((await invalidBoardEdit).code).toBe("INVALID_STATE");
 
     const p1Chat = waitForEvent<{ text: string }>(p1, SERVER_TO_CLIENT.CHAT_MESSAGE);
     const p2Chat = waitForEvent<{ text: string }>(p2, SERVER_TO_CLIENT.CHAT_MESSAGE);
@@ -79,7 +85,7 @@ describe("Week 2 socket handlers", () => {
     expect((await p2Chat).text).toBe("hello");
   });
 
-  it("allows eliminate during asker-actions and updates actor board only", async () => {
+  it("allows either player to toggle a private board during live rounds and keeps updates actor-local", async () => {
     running = await startServer(0);
     const url = `http://localhost:${running.port}`;
 
@@ -96,29 +102,45 @@ describe("Week 2 socket handlers", () => {
     const p1Start = waitForEvent<GameStartedPayload>(p1, SERVER_TO_CLIENT.GAME_STARTED);
     const p2Start = waitForEvent<GameStartedPayload>(p2, SERVER_TO_CLIENT.GAME_STARTED);
     p2.emit(CLIENT_TO_SERVER.JOIN_ROOM, { roomCode: roomCreated.roomCode, displayName: "P2" } satisfies JoinRoomPayload);
-    const [p1Started] = await Promise.all([p1Start, p2Start]);
-    const eliminatableFlag = p1Started.availableFlagCodes.find((flagCode) => flagCode !== p1Started.yourSecretFlag)
+    const [p1Started, p2Started] = await Promise.all([p1Start, p2Start]);
+    const p2Flag = p2Started.availableFlagCodes.find((flagCode) => flagCode !== p2Started.yourSecretFlag)
+      ?? p2Started.availableFlagCodes[0];
+    const p1Flag = p1Started.availableFlagCodes.find((flagCode) => flagCode !== p1Started.yourSecretFlag && flagCode !== p2Flag)
       ?? p1Started.availableFlagCodes[0];
+
+    const p2BoardUpdated = waitForEvent<{ eliminatedFlagCodes: string[] }>(p2, SERVER_TO_CLIENT.BOARD_UPDATED);
+    let p1SawBoardUpdated = false;
+    p1.once(SERVER_TO_CLIENT.BOARD_UPDATED, () => {
+      p1SawBoardUpdated = true;
+    });
+
+    p2.emit(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, { flagCode: p2Flag, eliminated: true });
+    const p2Update = await p2BoardUpdated;
+
+    expect(p2Update.eliminatedFlagCodes).toContain(p2Flag);
+    expect(p1SawBoardUpdated).toBe(false);
 
     const incomingQuestion = waitForEvent(p2, SERVER_TO_CLIENT.INCOMING_QUESTION);
     p1.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: "Is it in Europe?" });
     await incomingQuestion;
 
-    const askerActionsState = waitForTurnState(p1, "awaiting-asker-actions");
-    p2.emit(CLIENT_TO_SERVER.ANSWER_QUESTION, { answer: "yes" });
-    await askerActionsState;
-
-    const boardUpdated = waitForEvent<{ eliminatedFlagCodes: string[] }>(p1, SERVER_TO_CLIENT.BOARD_UPDATED);
-    let p2BoardUpdated = false;
+    const p1BoardUpdated = waitForEvent<{ eliminatedFlagCodes: string[] }>(p1, SERVER_TO_CLIENT.BOARD_UPDATED);
+    let p2SawBoardUpdated = false;
     p2.once(SERVER_TO_CLIENT.BOARD_UPDATED, () => {
-      p2BoardUpdated = true;
+      p2SawBoardUpdated = true;
     });
 
-    p1.emit(CLIENT_TO_SERVER.ELIMINATE_FLAG, { flagCode: eliminatableFlag });
-    const update = await boardUpdated;
+    p1.emit(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, { flagCode: p1Flag, eliminated: true });
+    const p1Update = await p1BoardUpdated;
 
-    expect(update.eliminatedFlagCodes).toContain(eliminatableFlag);
-    expect(p2BoardUpdated).toBe(false);
+    expect(p1Update.eliminatedFlagCodes).toContain(p1Flag);
+    expect(p2SawBoardUpdated).toBe(false);
+
+    const clearedBoard = waitForEvent<{ eliminatedFlagCodes: string[] }>(p2, SERVER_TO_CLIENT.BOARD_UPDATED);
+    p2.emit(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, { flagCode: p2Flag, eliminated: false });
+    const clearedUpdate = await clearedBoard;
+
+    expect(clearedUpdate.eliminatedFlagCodes).not.toContain(p2Flag);
   });
 
   it("allows new-game only after match-over", async () => {

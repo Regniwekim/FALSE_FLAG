@@ -219,7 +219,7 @@
                 <tr><th>Event</th><th>Direction</th><th>Payload</th><th>Server Action</th></tr>
                 <tr><td>ask-question</td><td>Client -> Server</td><td>{ question: string }</td><td>Validate it ends with "?", broadcast to opponent as "incoming-question"</td></tr>
                 <tr><td>answer-question</td><td>Client -> Server</td><td>{ answer: "yes" | "no" }</td><td>Broadcast answer to asker; advance turn only after asker ends turn</td></tr>
-                <tr><td>eliminate-flag</td><td>Client -> Server</td><td>{ flagCode: string }</td><td>Update player's private eliminated set; broadcast "board-updated" to that player only</td></tr>
+                <tr><td>set-flag-elimination</td><td>Client -> Server</td><td>{ flagCode: string, eliminated: boolean }</td><td>Set a player's private eliminated state for a flag; broadcast "board-updated" to that player only</td></tr>
                 <tr><td>end-turn</td><td>Client -> Server</td><td>{}</td><td>Switch turn, notify both players</td></tr>
                 <tr><td>make-guess</td><td>Client -> Server</td><td>{ guessedFlagCode: string }</td><td>Compare to opponent secret -> emit win/lose + game-over</td></tr>
                 <tr><td>chat-message</td><td>Client -> Server</td><td>{ text: string }</td><td>Broadcast to both (for non-question chat if desired)</td></tr>

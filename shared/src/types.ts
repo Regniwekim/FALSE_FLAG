@@ -33,8 +33,9 @@ export interface AnswerQuestionPayload {
   answer: "yes" | "no";
 }
 
-export interface EliminateFlagPayload {
+export interface SetFlagEliminationPayload {
   flagCode: string;
+  eliminated: boolean;
 }
 
 export interface MakeGuessPayload {

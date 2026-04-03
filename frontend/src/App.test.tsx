@@ -471,11 +471,13 @@ describe("App turn/state control gating", () => {
     });
   });
 
-  it("keeps flag card visible until board-updated confirms elimination", async () => {
+  it("lets players toggle flags off-turn and waits for board-updated before changing marker state", async () => {
     render(<App />);
     startAsPlayerOne();
 
-    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: "awaiting-asker-actions" });
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_ENDED, { nextActivePlayerId: "p2" });
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: "awaiting-question" });
+
     await waitFor(() => {
       const usCardButton = screen.getByAltText("US").closest("button");
       expect(usCardButton).not.toBeNull();
@@ -487,7 +489,11 @@ describe("App turn/state control gating", () => {
 
     fireEvent.click(usCardButton);
 
-    expect(mocked.socket.emits.some((e) => e.event === CLIENT_TO_SERVER.ELIMINATE_FLAG)).toBe(true);
+    expect(
+      mocked.socket.emits.some(
+        (e) => e.event === CLIENT_TO_SERVER.SET_FLAG_ELIMINATION && e.payload.flagCode === "us" && e.payload.eliminated === true
+      )
+    ).toBe(true);
     expect(usCardButton.className.includes("flag-card-eliminated")).toBe(false);
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.BOARD_UPDATED, { eliminatedFlagCodes: ["us"] });
@@ -498,6 +504,44 @@ describe("App turn/state control gating", () => {
       expect((updatedUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(true);
       expect(screen.getByRole("progressbar", { name: "Intel gathered" })).toHaveAttribute("aria-valuenow", "4");
       expect(screen.getByText("1 / 24 flags eliminated")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByAltText("US").closest("button") as HTMLButtonElement);
+
+    expect(
+      mocked.socket.emits.some(
+        (e) => e.event === CLIENT_TO_SERVER.SET_FLAG_ELIMINATION && e.payload.flagCode === "us" && e.payload.eliminated === false
+      )
+    ).toBe(true);
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.BOARD_UPDATED, { eliminatedFlagCodes: [] });
+
+    await waitFor(() => {
+      const restoredUsCard = screen.getByAltText("US").closest("button") as HTMLButtonElement | null;
+      expect(restoredUsCard).not.toBeNull();
+      expect((restoredUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(false);
+      expect(screen.getByText("0 / 24 flags eliminated")).toBeInTheDocument();
+    });
+  });
+
+  it("locks board edits during round-over", async () => {
+    render(<App />);
+    startAsPlayerOne();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROUND_OVER, {
+      winnerPlayerId: "p2",
+      loserPlayerId: "p1",
+      reason: "wrong-guess",
+      revealedSecrets: {
+        p1: "us",
+        p2: "ca"
+      }
+    });
+
+    await waitFor(() => {
+      const usCardButton = screen.getByAltText("US").closest("button");
+      expect(usCardButton).not.toBeNull();
+      expect(usCardButton).toBeDisabled();
     });
   });
 
@@ -533,13 +577,11 @@ describe("App turn/state control gating", () => {
     render(<App />);
     startAsPlayerOne();
 
-    mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: "awaiting-asker-actions" });
-
     const usButton = await screen.findByRole("button", { name: "US" });
     const usMarker = usButton.closest(".map-flag-marker") as HTMLDivElement | null;
     expect(usMarker).not.toBeNull();
 
-    const countEliminateEmits = () => mocked.socket.emits.filter((event) => event.event === CLIENT_TO_SERVER.ELIMINATE_FLAG).length;
+    const countEliminateEmits = () => mocked.socket.emits.filter((event) => event.event === CLIENT_TO_SERVER.SET_FLAG_ELIMINATION).length;
 
     vi.useFakeTimers();
 
@@ -570,8 +612,8 @@ describe("App turn/state control gating", () => {
     fireEvent.click(usButton);
 
     expect(countEliminateEmits()).toBe(1);
-    const eliminateEvents = mocked.socket.emits.filter((event) => event.event === CLIENT_TO_SERVER.ELIMINATE_FLAG);
-    expect(eliminateEvents[eliminateEvents.length - 1]?.payload).toEqual({ flagCode: "us" });
+    const eliminateEvents = mocked.socket.emits.filter((event) => event.event === CLIENT_TO_SERVER.SET_FLAG_ELIMINATION);
+    expect(eliminateEvents[eliminateEvents.length - 1]?.payload).toEqual({ flagCode: "us", eliminated: true });
   });
 
   it("shows rematch only after match-over and emits new-game", async () => {

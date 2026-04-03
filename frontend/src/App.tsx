@@ -60,6 +60,11 @@ type RoundRevealPhase = "hidden" | "impact" | "secrets" | "settled";
 
 type ScorePulseTarget = "self" | "opponent" | null;
 
+type RecentBoardChange = {
+  flagCode: string;
+  eliminated: boolean;
+} | null;
+
 type MapFlagPreviewIntent = "hover" | "focus" | "touch";
 
 type MapFlagPreviewAlignment = "center" | "start" | "end";
@@ -251,7 +256,7 @@ type FlagMarkerProps = {
   flagCode: string;
   marker: { x: number; y: number };
   isEliminated: boolean;
-  canEliminate: boolean;
+  canEditBoard: boolean;
   isPreviewActive: boolean;
   isPreviewExpanded: boolean;
   previewAlignment: MapFlagPreviewAlignment;
@@ -268,7 +273,7 @@ const FlagMarker = memo(function FlagMarker({
   flagCode,
   marker,
   isEliminated,
-  canEliminate,
+  canEditBoard,
   isPreviewActive,
   isPreviewExpanded,
   previewAlignment,
@@ -368,7 +373,7 @@ const FlagMarker = memo(function FlagMarker({
         onFocus={() => {
           onPreviewStart(flagCode, "focus");
         }}
-        disabled={!canEliminate}
+        disabled={!canEditBoard}
       >
         <img src={toFlagImage(flagCode)} alt={flagCode.toUpperCase()} loading="lazy" />
         <span>{flagCode.toUpperCase()}</span>
@@ -382,7 +387,7 @@ const FlagMarker = memo(function FlagMarker({
     && previousProps.marker.x === nextProps.marker.x
     && previousProps.marker.y === nextProps.marker.y
     && previousProps.isEliminated === nextProps.isEliminated
-    && previousProps.canEliminate === nextProps.canEliminate
+    && previousProps.canEditBoard === nextProps.canEditBoard
     && previousProps.isPreviewActive === nextProps.isPreviewActive
     && previousProps.isPreviewExpanded === nextProps.isPreviewExpanded
     && previousProps.previewAlignment === nextProps.previewAlignment
@@ -438,7 +443,7 @@ export function App() {
   const [pendingGuessCode, setPendingGuessCode] = useState<string | null>(null);
   const [nextRoundDeadlineMs, setNextRoundDeadlineMs] = useState<number | null>(null);
   const [nextRoundCountdownMs, setNextRoundCountdownMs] = useState<number | null>(null);
-  const [recentlyConfirmedFlagCode, setRecentlyConfirmedFlagCode] = useState<string | null>(null);
+  const [recentBoardChange, setRecentBoardChange] = useState<RecentBoardChange>(null);
   const [roundRevealPhase, setRoundRevealPhase] = useState<RoundRevealPhase>("hidden");
   const [scorePulseTarget, setScorePulseTarget] = useState<ScorePulseTarget>(null);
   const [composerModePreview, setComposerModePreview] = useState<"chat" | "question">("chat");
@@ -505,13 +510,13 @@ export function App() {
     toastTimersRef.current.push(timer);
   };
 
-  const pulseConfirmedFlag = (flagCode: string) => {
-    setRecentlyConfirmedFlagCode(flagCode);
+  const pulseConfirmedFlag = (flagCode: string, eliminated: boolean) => {
+    setRecentBoardChange({ flagCode, eliminated });
     if (feedbackResetTimerRef.current) {
       window.clearTimeout(feedbackResetTimerRef.current);
     }
     feedbackResetTimerRef.current = window.setTimeout(() => {
-      setRecentlyConfirmedFlagCode(null);
+      setRecentBoardChange(null);
     }, 1100);
   };
 
@@ -732,7 +737,7 @@ export function App() {
       setPendingGuessCode(null);
       setNextRoundDeadlineMs(null);
       setNextRoundCountdownMs(null);
-      setRecentlyConfirmedFlagCode(null);
+      setRecentBoardChange(null);
       setRoundRevealPhase("hidden");
       setScorePulseTarget(null);
       scoreRef.current = score;
@@ -758,7 +763,7 @@ export function App() {
       setPendingGuessCode(null);
       setNextRoundDeadlineMs(null);
       setNextRoundCountdownMs(null);
-      setRecentlyConfirmedFlagCode(null);
+      setRecentBoardChange(null);
       setRoundRevealPhase("hidden");
       setScorePulseTarget(null);
       scoreRef.current = {};
@@ -814,10 +819,15 @@ export function App() {
       setEliminatedCodes((previousCodes) => {
         const nextCodes = payload.eliminatedFlagCodes;
         const addedCode = nextCodes.find((flagCode) => !previousCodes.includes(flagCode)) ?? null;
+        const removedCode = previousCodes.find((flagCode) => !nextCodes.includes(flagCode)) ?? null;
         if (addedCode) {
-          pulseConfirmedFlag(addedCode);
+          pulseConfirmedFlag(addedCode, true);
           pushToast(`${addedCode.toUpperCase()} eliminated from your board.`, "success");
           triggerHaptic(14);
+        } else if (removedCode) {
+          pulseConfirmedFlag(removedCode, false);
+          pushToast(`${removedCode.toUpperCase()} restored to active board.`, "info");
+          triggerHaptic(10);
         }
         return nextCodes;
       });
@@ -975,8 +985,8 @@ export function App() {
   const activeFlagCodes = gameInfo?.availableFlagCodes.length ? gameInfo.availableFlagCodes : DEFAULT_FLAG_CODES;
   const canAsk = !!(gameInfo && isYourTurn && turnState === "awaiting-question");
   const canAnswer = !!(gameInfo && !isYourTurn && turnState === "awaiting-answer" && incomingQuestion);
-  const canEliminate = !!(gameInfo && isYourTurn && turnState === "awaiting-asker-actions");
-  const canEndTurn = canEliminate;
+  const canEditBoard = !!(gameInfo && turnState && turnState !== "round-over");
+  const canEndTurn = !!(gameInfo && isYourTurn && turnState === "awaiting-asker-actions");
   const canGuess = !!(
     gameInfo &&
     isYourTurn &&
@@ -1216,13 +1226,14 @@ export function App() {
     socket.emit(CLIENT_TO_SERVER.ANSWER_QUESTION, { answer });
   };
 
-  const eliminateFlag = (flagCode: string) => {
-    if (!canEliminate) {
+  const setFlagElimination = (flagCode: string) => {
+    if (!canEditBoard) {
       return;
     }
+    const eliminated = !eliminatedCodes.includes(flagCode);
     playButtonClick();
     triggerHaptic(10);
-    socket.emit(CLIENT_TO_SERVER.ELIMINATE_FLAG, { flagCode });
+    socket.emit(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, { flagCode, eliminated });
   };
 
   const endTurn = () => {
@@ -1401,8 +1412,8 @@ export function App() {
     }
 
     endMapFlagPreview(flagCode);
-    eliminateFlag(flagCode);
-  }, [eliminateFlag, endMapFlagPreview]);
+    setFlagElimination(flagCode);
+  }, [endMapFlagPreview, setFlagElimination]);
 
   const clampPanY = (candidateY: number, zoomLevel: number): number => {
     const viewportHeight = mapViewportRef.current?.clientHeight ?? viewportSize.height;
@@ -1790,7 +1801,7 @@ export function App() {
       return;
     }
 
-    if (!activeFlagCodes.includes(activePreviewFlagCode) || eliminatedCodes.includes(activePreviewFlagCode)) {
+    if (!activeFlagCodes.includes(activePreviewFlagCode)) {
       endMapFlagPreview(activePreviewFlagCode);
     }
   }, [activeFlagCodes, eliminatedCodes, endMapFlagPreview, expandedPreviewFlagCode, previewedFlagCode]);
@@ -2008,10 +2019,14 @@ export function App() {
                 <p className="intel-empty-line">Round controls are locked. Use rematch or start a fresh room below.</p>
               ) : (
                 <section className="intel-action-panel" aria-label="Round actions">
-                  {pendingGuessCode || recentlyConfirmedFlagCode ? (
+                  {pendingGuessCode || recentBoardChange ? (
                     <div className="feedback-chip-row" aria-live="polite">
                       {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
-                      {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
+                      {recentBoardChange ? (
+                        <p className={`feedback-chip ${recentBoardChange.eliminated ? "feedback-chip-success" : "feedback-chip-info"}`}>
+                          {recentBoardChange.eliminated ? "Confirmed eliminated" : "Returned to active board"}: {recentBoardChange.flagCode.toUpperCase()}
+                        </p>
+                      ) : null}
                     </div>
                   ) : null}
 
@@ -2180,7 +2195,7 @@ export function App() {
                 flagCode={flagCode}
                 marker={marker}
                 isEliminated={eliminatedCodes.includes(flagCode)}
-                canEliminate={canEliminate}
+                canEditBoard={canEditBoard}
                 isPreviewActive={previewedFlagCode === flagCode}
                 isPreviewExpanded={expandedPreviewFlagCode === flagCode}
                 previewAlignment={getMapFlagPreviewAlignment(marker)}

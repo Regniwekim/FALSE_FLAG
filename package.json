@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "concurrently -n FRONTEND,BACKEND -c cyan,magenta \"npm run dev -w frontend\" \"npm run dev -w backend\"",
     "build": "npm run build -w shared && npm run build -w backend && npm run build -w frontend",
+    "clean": "npm run clean -w shared && npm run clean -w backend && npm run clean -w frontend",
     "typecheck": "npm run typecheck -w shared && npm run typecheck -w backend && npm run typecheck -w frontend",
     "enrich:country-data": "node scripts/enrich-country-metadata.mjs --write",
     "validate:flag-data": "node scripts/recalculate-flag-centroids.mjs --check",

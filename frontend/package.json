@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true });\"",
+    "prebuild": "npm run clean",
     "build": "vite build",
-    "build:prod": "npm run optimize:svg && vite build",
+    "build:prod": "npm run optimize:svg && npm run build",
     "optimize:svg": "svgo public/world.svg --config=svgo.config.mjs -o public/world.svg",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

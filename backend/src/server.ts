@@ -13,7 +13,7 @@ import {
   type AskQuestionPayload,
   type AnswerQuestionPayload,
   type MakeGuessPayload,
-  type EliminateFlagPayload,
+  type SetFlagEliminationPayload,
   type ChatMessagePayload
 } from "@flagwho/shared";
 import { RoomManager } from "./room-manager.js";
@@ -346,7 +346,7 @@ export function createRealtimeApp() {
       }
     });
 
-    socket.on(CLIENT_TO_SERVER.ELIMINATE_FLAG, (payload: EliminateFlagPayload) => {
+    socket.on(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, (payload: SetFlagEliminationPayload) => {
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room || !room.round) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -359,13 +359,17 @@ export function createRealtimeApp() {
         return;
       }
 
-      const validation = validator.validateEliminateFlag(room, actor.playerId, payload?.flagCode);
+      const validation = validator.validateSetFlagElimination(room, actor.playerId, payload?.flagCode, payload?.eliminated);
       if (!validation.ok) {
         emitError(socket, validation.code ?? ERROR_CODES.INVALID_STATE, validation.message ?? "Invalid action.");
         return;
       }
 
-      actor.eliminatedFlagCodes.push(payload.flagCode);
+      const nextEliminatedCodes = payload.eliminated
+        ? Array.from(new Set([...actor.eliminatedFlagCodes, payload.flagCode]))
+        : actor.eliminatedFlagCodes.filter((flagCode) => flagCode !== payload.flagCode);
+
+      actor.eliminatedFlagCodes = nextEliminatedCodes;
       socket.emit(SERVER_TO_CLIENT.BOARD_UPDATED, {
         eliminatedFlagCodes: actor.eliminatedFlagCodes
       });

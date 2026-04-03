@@ -89,20 +89,24 @@ describe("EventValidator rule validation", () => {
     expect(result.code).toBe(ERROR_CODES.NOT_YOUR_TURN);
   });
 
-  it("rejects eliminate-flag outside asker-actions", () => {
+  it("allows either player to edit a private board during a live round", () => {
     const validator = new EventValidator();
-    const result = validator.validateEliminateFlag(roomWithState("awaiting-question"), "p1", "us");
+    const result = validator.validateSetFlagElimination(roomWithState("awaiting-answer"), "p2", "us", true);
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects board edits during round-over", () => {
+    const validator = new EventValidator();
+    const result = validator.validateSetFlagElimination(roomWithState("round-over"), "p1", "us", true);
     expect(result.ok).toBe(false);
     expect(result.code).toBe(ERROR_CODES.INVALID_STATE);
   });
 
-  it("rejects duplicate eliminated flag", () => {
+  it("rejects non-boolean board edit payloads", () => {
     const validator = new EventValidator();
-    const room = roomWithState("awaiting-asker-actions");
-    room.players[0].eliminatedFlagCodes.push("us");
-    const result = validator.validateEliminateFlag(room, "p1", "us");
+    const result = validator.validateSetFlagElimination(roomWithState("awaiting-question"), "p1", "us", "yes");
     expect(result.ok).toBe(false);
-    expect(result.code).toBe(ERROR_CODES.ALREADY_ELIMINATED);
+    expect(result.code).toBe(ERROR_CODES.INVALID_STATE);
   });
 
   it("rejects empty chat message", () => {

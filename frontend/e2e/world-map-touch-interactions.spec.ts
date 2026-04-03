@@ -111,7 +111,7 @@ async function dispatchTouchEvent(locator: Locator, type: "touchstart" | "touche
   });
 }
 
-test("mobile long press reveals a map preview without eliminating and tap still eliminates", async ({ browser }) => {
+test("mobile long press reveals a map preview without eliminating and tap toggles elimination", async ({ browser }) => {
   const mobileContext: BrowserContext = await browser.newContext({
     ...devices["iPhone 12"],
     locale: "en-US"
@@ -183,6 +183,14 @@ test("mobile long press reveals a map preview without eliminating and tap still 
 
   await expect(mobilePage.getByText("1 / 24 flags eliminated")).toBeVisible();
   await expect(mobilePage.getByRole("button", { name: tapLabel }).first()).toHaveClass(/flag-card-eliminated/);
+  await expect(hostPage.getByRole("button", { name: tapLabel }).first()).not.toHaveClass(/flag-card-eliminated/);
+
+  await dispatchTouchEvent(tapCard, "touchstart", tapPoint);
+  await dispatchTouchEvent(tapCard, "touchend", tapPoint);
+  await tapCard.dispatchEvent("click");
+
+  await expect(mobilePage.getByText("0 / 24 flags eliminated")).toBeVisible();
+  await expect(mobilePage.getByRole("button", { name: tapLabel }).first()).not.toHaveClass(/flag-card-eliminated/);
   await expect(hostPage.getByRole("button", { name: tapLabel }).first()).not.toHaveClass(/flag-card-eliminated/);
 
   await mobileContext.close();

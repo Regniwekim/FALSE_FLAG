@@ -66,23 +66,20 @@ export class EventValidator {
     return { ok: true };
   }
 
-  validateEliminateFlag(room: RoomState, actorPlayerId: string, flagCode: unknown): ValidationResult {
-    if (!room.round || room.round.turnState !== "awaiting-asker-actions") {
-      return fail(ERROR_CODES.INVALID_STATE, "Elimination is not allowed in the current state.");
-    }
-    if (room.round.activePlayerId !== actorPlayerId) {
-      return fail(ERROR_CODES.NOT_YOUR_TURN, "Only the active player can eliminate a flag.");
+  validateSetFlagElimination(room: RoomState, actorPlayerId: string, flagCode: unknown, eliminated: unknown): ValidationResult {
+    if (room.status !== "in-game" || !room.round || room.round.turnState === "round-over") {
+      return fail(ERROR_CODES.INVALID_STATE, "Board editing is not allowed in the current state.");
     }
     if (!isFlagCodeInList(flagCode, room.availableFlagCodes)) {
       return fail(ERROR_CODES.INVALID_FLAG, "Flag code is invalid.");
+    }
+    if (typeof eliminated !== "boolean") {
+      return fail(ERROR_CODES.INVALID_STATE, "Elimination state must be a boolean.");
     }
 
     const actor = room.players.find((player) => player.playerId === actorPlayerId);
     if (!actor) {
       return fail(ERROR_CODES.INVALID_STATE, "Player not found in room.");
-    }
-    if (actor.eliminatedFlagCodes.includes(flagCode)) {
-      return fail(ERROR_CODES.ALREADY_ELIMINATED, "Flag already eliminated.");
     }
     return { ok: true };
   }

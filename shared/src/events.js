@@ -3,7 +3,7 @@ export const CLIENT_TO_SERVER = {
     JOIN_ROOM: "join-room",
     ASK_QUESTION: "ask-question",
     ANSWER_QUESTION: "answer-question",
-    ELIMINATE_FLAG: "eliminate-flag",
+    SET_FLAG_ELIMINATION: "set-flag-elimination",
     END_TURN: "end-turn",
     MAKE_GUESS: "make-guess",
     CHAT_MESSAGE: "chat-message",

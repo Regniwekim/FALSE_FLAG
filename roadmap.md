@@ -49,8 +49,8 @@
   3. Turn owner is always accurate and visible on both clients.
 
 3. Week 2. Full real-time gameplay loop (critical path)
-- Current status (2026-04-02): Completed and signed off. Backend implements all Week 2 socket events with server-side validation and championship progression; frontend implements ask/answer/eliminate/end-turn/guess/chat/new-game controls with turn/state gating, image-backed flag cards, visible chat stream, and corrected room-code join enablement.
-- Test status (2026-04-02): Backend tests passing for unit validation, full turn loop, expanded negative actor/state checks (`answer-question`, `make-guess`, invalid chat), wrong-guess round-over, and Week 2 handlers (`eliminate-flag`, `chat-message`, `new-game`) including successful eliminate in asker-actions with actor-only board update. Frontend component tests, workspace typecheck, production build, and Playwright two-client E2E flows all pass after the final Week 2 UX bugfix validation pass.
+- Current status (2026-04-03): Backend implements the Week 2 socket flow with server-side validation and championship progression, and private board editing now uses `set-flag-elimination` so either player can toggle their own eliminated flags during any live round state before `round-over`. Frontend keeps ask/answer/end-turn/guess turn gating, while board editing is room-active rather than turn-owner gated.
+- Test status (2026-04-03): Workspace `typecheck`, targeted backend validation/socket/privacy tests, frontend component tests, Playwright desktop/mobile flows, and the full workspace build all pass for anytime private-board toggling, round-over lockout, actor-local `board-updated` privacy, and reversible marker state.
 - Additional validation (2026-04-02): Frontend component tests added for turn/state control gating (ask/answer enablement), and backend privacy integration test added to verify opponent secret is not revealed before `round-over`.
 - Additional validation (2026-04-02): Frontend component tests expanded for turn/state control gating (ask/answer, turn-owner updates, elimination confirmation behavior, and match-over new-game control), and backend privacy integration test verifies opponent secret is not revealed before `round-over`.
 - Additional validation (2026-04-02): Playwright E2E test added and passing for a two-context browser flow (create/join -> ask/answer -> eliminate -> end-turn -> chat) using live frontend+backend servers.
@@ -61,7 +61,7 @@
   1. create-room, join-room
   2. ask-question
   3. answer-question
-  4. eliminate-flag
+  4. set-flag-elimination
   5. end-turn
   6. make-guess
   7. chat-message
