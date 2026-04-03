@@ -1428,9 +1428,25 @@ button:disabled {
   box-shadow: 0 20px 34px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 16, 240, 0.08);
 }
 
+/* Bridge the 18px gap between infobox and flag so hover is continuous */
+.map-flag-preview::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 100%;
+  width: 100%;
+  height: 18px;
+  pointer-events: auto;
+}
+
 .map-flag-marker-preview-below .map-flag-preview {
   top: calc(100% + 18px);
   bottom: auto;
+}
+
+.map-flag-marker-preview-below .map-flag-preview::before {
+  top: auto;
+  bottom: 100%;
 }
 
 .map-flag-marker-preview-start .map-flag-preview {
@@ -1467,6 +1483,16 @@ button:disabled {
 .map-flag-preview-iso,
 .map-flag-preview-title {
   margin: 0;
+}
+
+.map-flag-preview-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.map-flag-preview-title a:hover {
+  text-decoration: underline;
+  color: #00F0FF;
 }
 
 .map-flag-preview-kicker {

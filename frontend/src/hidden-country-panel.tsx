@@ -146,6 +146,7 @@ export function CompactCountryInfobox({ flagCode, className, dataTestId }: Compa
   const iso2 = flagCode.toUpperCase();
   const metadata = useMemo(() => getCountryMetadata(flagCode), [flagCode]);
   const countryName = metadata?.name ?? iso2;
+  const wikipediaUrl = metadata?.countryInfo?.source?.wikipediaUrl ?? null;
   const compactRows = useMemo(() => buildCompactCountryInfoboxRows(metadata?.countryInfo ?? null), [metadata?.countryInfo]);
   const infoboxClassName = ["secret-country-infobox", "map-flag-preview", className ?? ""].filter(Boolean).join(" ");
 
@@ -155,7 +156,11 @@ export function CompactCountryInfobox({ flagCode, className, dataTestId }: Compa
         <img src={toFlagImage(flagCode)} alt={`${countryName} flag`} loading="lazy" />
         <div className="map-flag-preview-copy">
           <p className="map-flag-preview-kicker">Intel Snapshot</p>
-          <h3 className="map-flag-preview-title">{countryName}</h3>
+          <h3 className="map-flag-preview-title">
+            {wikipediaUrl
+              ? <a href={wikipediaUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>{countryName}</a>
+              : countryName}
+          </h3>
           <p className="map-flag-preview-iso">{iso2}</p>
         </div>
       </div>
