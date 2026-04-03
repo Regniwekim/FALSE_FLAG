@@ -28,6 +28,17 @@ import {
   playWrongGuess,
   playButtonClick
 } from "./audio";
+import { DesktopWindow } from "./desktop-window";
+import {
+  DESKTOP_WINDOW_BREAKPOINT,
+  DESKTOP_WINDOW_STORAGE_KEY,
+  loadPersistedDesktopWindows,
+  normalizeDesktopWindows,
+  raiseDesktopWindow,
+  type DesktopWindowLayout,
+  type DesktopWindowId,
+  updateDesktopWindowLayout
+} from "./window-layout";
 import { WORLD_MAP_MARKER_POSITIONS, type FlagMarkerPositions } from "./world-map-marker-positions";
 
 type LobbyState = {
@@ -58,6 +69,49 @@ const DIFFICULTY_LABELS: Record<RoomDifficulty, string> = {
 const MAP_WIDTH = 2000;
 const MAP_HEIGHT = 857;
 const CHAMPIONSHIP_TARGET_WINS = 3;
+
+type ViewportSize = {
+  width: number;
+  height: number;
+};
+
+function getViewportSize(): ViewportSize {
+  if (typeof window === "undefined") {
+    return { width: 1280, height: 800 };
+  }
+
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+}
+
+function getCenteredPanY(viewportHeight: number, zoomLevel: number): number {
+  const mapHeight = MAP_HEIGHT * zoomLevel;
+  if (mapHeight >= viewportHeight) {
+    return 0;
+  }
+
+  return Math.round((viewportHeight - mapHeight) / 2);
+}
+
+function getDefaultMapPan(viewportWidth: number, viewportHeight: number): { x: number; y: number } {
+  return {
+    x: Math.round((viewportWidth - MAP_WIDTH) / 2),
+    y: getCenteredPanY(viewportHeight, 1)
+  };
+}
+
+function clampMapPanY(candidateY: number, zoomLevel: number, viewportHeight: number): number {
+  const mapHeight = MAP_HEIGHT * zoomLevel;
+
+  if (mapHeight <= viewportHeight) {
+    return getCenteredPanY(viewportHeight, zoomLevel);
+  }
+
+  const minY = viewportHeight - mapHeight;
+  return Math.max(minY, Math.min(0, candidateY));
+}
 
 function toFlagImage(flagCode: string): string {
   return `https://flagcdn.com/w80/${flagCode}.png`;
@@ -161,6 +215,8 @@ function WorldMapBackdrop() {
 }
 
 export function App() {
+  const initialViewportSize = getViewportSize();
+  const initialMapPan = getDefaultMapPan(initialViewportSize.width, initialViewportSize.height);
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Disconnected");
   const [playerId, setPlayerId] = useState<string | null>(null);
@@ -194,9 +250,11 @@ export function App() {
   const [recentlyConfirmedFlagCode, setRecentlyConfirmedFlagCode] = useState<string | null>(null);
   const [roundRevealPhase, setRoundRevealPhase] = useState<RoundRevealPhase>("hidden");
   const [scorePulseTarget, setScorePulseTarget] = useState<ScorePulseTarget>(null);
+  const [viewportSize, setViewportSize] = useState<ViewportSize>(initialViewportSize);
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [pan, setPan] = useState(initialMapPan);
   const [isPanning, setIsPanning] = useState(false);
+  const [desktopWindows, setDesktopWindows] = useState(() => loadPersistedDesktopWindows(initialViewportSize.width, initialViewportSize.height));
   const flagMarkerPositions: FlagMarkerPositions = WORLD_MAP_MARKER_POSITIONS;
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
@@ -219,7 +277,7 @@ export function App() {
   const pendingQuestionRef = useRef<string | null>(null);
   const scoreRef = useRef<Record<string, number>>({});
   const zoomRef = useRef(1);
-  const panRef = useRef({ x: 0, y: 0 });
+  const panRef = useRef(initialMapPan);
   const pendingViewportStateRef = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null);
   const viewportFrameRef = useRef<number | null>(null);
 
@@ -992,10 +1050,38 @@ export function App() {
   };
 
   const clampPanY = (candidateY: number, zoomLevel: number): number => {
-    const viewportHeight = mapViewportRef.current?.clientHeight ?? 520;
-    const minY = Math.min(0, viewportHeight - MAP_HEIGHT * zoomLevel);
-    return Math.max(minY, Math.min(0, candidateY));
+    const viewportHeight = mapViewportRef.current?.clientHeight ?? viewportSize.height;
+    return clampMapPanY(candidateY, zoomLevel, viewportHeight);
   };
+
+  useEffect(() => {
+    const handleResize = () => {
+      const nextViewportSize = getViewportSize();
+      setViewportSize(nextViewportSize);
+      setDesktopWindows((currentWindows) => normalizeDesktopWindows(currentWindows, nextViewportSize.width, nextViewportSize.height));
+
+      const nextDefaultPan = getDefaultMapPan(nextViewportSize.width, nextViewportSize.height);
+      const nextPan = {
+        x: zoomRef.current === 1 ? nextDefaultPan.x : panRef.current.x,
+        y: clampMapPanY(panRef.current.y, zoomRef.current, nextViewportSize.height)
+      };
+
+      applyViewportState(zoomRef.current, nextPan);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.localStorage.setItem(DESKTOP_WINDOW_STORAGE_KEY, JSON.stringify(desktopWindows));
+  }, [desktopWindows]);
 
   useEffect(() => {
     const viewport = mapViewportRef.current;
@@ -1109,7 +1195,7 @@ export function App() {
   };
 
   const resetMapView = () => {
-    applyViewportState(1, { x: 0, y: 0 });
+    applyViewportState(1, getDefaultMapPan(viewportSize.width, viewportSize.height));
   };
 
   const tileSpan = MAP_WIDTH * zoom;
@@ -1278,6 +1364,7 @@ export function App() {
     ? `${Math.max(0.1, nextRoundCountdownMs / 1000).toFixed(1)}s`
     : null;
   const areSecretsVisible = roundRevealPhase === "secrets" || roundRevealPhase === "settled";
+  const isDesktopWindowing = viewportSize.width >= DESKTOP_WINDOW_BREAKPOINT;
   const heroPanelClassName = connected
     ? /Reconnecting|Unable/.test(status)
       ? "panel panel-wide hero-panel hero-panel-warning"
@@ -1301,332 +1388,389 @@ export function App() {
     "result-card-match",
     matchWinnerId === playerId ? "result-card-match-win" : "result-card-match-loss"
   ].join(" ");
+  const mapCanvasClassName = isPanning ? "map-stage map-stage-canvas map-stage-panning" : "map-stage map-stage-canvas";
 
-  return (
-    <main className="app-shell">
-      <header className={heroPanelClassName}>
-        <div>
-          <p className="eyebrow">Week 3 Build In Progress</p>
-          <h1>.FALSE_FLAG//Global Signal</h1>
-          <p className="status">{status}</p>
-        </div>
-        <div className="hero-right-column">
-          <div className="hero-actions">
-            <button type="button" onClick={openRulesModal}>How to Play</button>
-          </div>
-          <div className="hero-meta">
-          <span className={connected ? "meta-pill meta-pill-online" : "meta-pill"}>
-            uplink {connected ? "online" : "offline"}
-          </span>
-          <span className="meta-pill">mission {currentMissionLabel}</span>
-          <span className="meta-pill">difficulty {roomDifficulty}</span>
-          <span className="meta-pill">room {roomCode ?? "none"}</span>
-          <span className="meta-pill">cell {seat ?? "pending"}</span>
-          <span className="meta-pill">agent {playerId ?? "pending"}</span>
-          </div>
-        </div>
-      </header>
+  const focusDesktopWindow = (windowId: DesktopWindowId) => {
+    setDesktopWindows((currentWindows) => raiseDesktopWindow(currentWindows, windowId));
+  };
 
-      {toastMessages.length > 0 ? (
-        <div className="toast-stack" aria-live="polite" aria-relevant="additions text">
-          {toastMessages.map((message) => (
-            <p key={message.id} className={`toast toast-${message.tone}`}>{message.text}</p>
+  const handleDesktopWindowLayoutChange = (windowId: DesktopWindowId, nextLayout: DesktopWindowLayout) => {
+    setDesktopWindows((currentWindows) => (
+      updateDesktopWindowLayout(currentWindows, windowId, nextLayout, viewportSize.width, viewportSize.height)
+    ));
+  };
+
+  const missionConsoleContent = (
+    <div className="desktop-panel-content">
+      <div className="controls controls-stack">
+        <input
+          value={lobby.displayName}
+          onChange={onDisplayNameChange}
+          placeholder="Display name"
+        />
+        <select
+          value={selectedDifficulty}
+          onChange={(event) => setSelectedDifficulty(event.target.value as RoomDifficulty)}
+          aria-label="Room difficulty"
+        >
+          {ROOM_DIFFICULTIES.map((difficulty) => (
+            <option key={difficulty} value={difficulty}>{formatDifficultyLabel(difficulty)}</option>
           ))}
+        </select>
+        <p className="difficulty-hint">
+          Easy starts with 24 countries, Medium with 36, Hard with 48, and 007 uses the full global list.
+        </p>
+        <button onClick={createRoom}>Create Room</button>
+      </div>
+
+      <div className="controls controls-stack">
+        <input
+          value={lobby.roomCodeInput}
+          onChange={onRoomCodeChange}
+          placeholder="Room code"
+        />
+        <button onClick={joinRoom} disabled={!canJoin}>
+          Join Room
+        </button>
+      </div>
+
+      <div className="invite-strip" aria-live="polite">
+        <input value={inviteLink || "Create a room to generate invite link"} readOnly />
+        <button onClick={copyInviteLink} disabled={!inviteLink}>
+          Copy Invite Link
+        </button>
+      </div>
+      {inviteStatus ? <p className="invite-status">{inviteStatus}</p> : null}
+
+      <div className="controls controls-stack">
+        <input
+          value={questionInput}
+          onChange={(event) => setQuestionInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              askQuestion();
+            }
+          }}
+          placeholder="Ask a yes-or-no question"
+          disabled={!canAsk}
+        />
+        <button onClick={askQuestion} disabled={!canAsk || !questionInput.trim()}>
+          Ask
+        </button>
+      </div>
+
+      <div className="status-list">
+        <p>Current phase: {formatTurnState(turnState)}</p>
+        <p>Eliminated flags: {eliminatedCodes.length}</p>
+        <p>Round result: {roundResult ? formatRoundReason(roundResult.reason) : "pending"}</p>
+      </div>
+
+      {pendingQuestionText || pendingGuessCode || recentlyConfirmedFlagCode ? (
+        <div className="feedback-chip-row" aria-live="polite">
+          {pendingQuestionText ? <p className="feedback-chip feedback-chip-info">Question in flight</p> : null}
+          {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
+          {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const intelDeskContent = (
+    <div className="desktop-panel-content desktop-panel-content-intel">
+      {!gameInfo ? (
+        <p>Waiting for game start...</p>
+      ) : (
+        <>
+          <div className="secret-slot secret-slot-featured">
+            <div>
+              <span className="slot-label">Your Hidden Location</span>
+              <strong>{gameInfo.yourSecretFlag.toUpperCase()}</strong>
+            </div>
+            <img src={toFlagImage(gameInfo.yourSecretFlag)} alt={`${gameInfo.yourSecretFlag.toUpperCase()} secret flag`} loading="lazy" />
+          </div>
+
+          <div className="round-detail-grid">
+            <div className="detail-card">
+              <span className="slot-label">Active Agent</span>
+              <strong className="active-agent-value">{gameInfo.activePlayerId}</strong>
+            </div>
+            <div className="detail-card">
+              <span className="slot-label">Confirmed Intel</span>
+              <strong>{yourScore}</strong>
+            </div>
+            <div className="detail-card">
+              <span className="slot-label">Interrogation Round</span>
+              <strong>{gameInfo.roundNumber}</strong>
+            </div>
+            <div className="detail-card">
+              <span className="slot-label">Difficulty</span>
+              <strong>{roomDifficulty.toUpperCase()}</strong>
+            </div>
+            <div className="detail-card">
+              <span className="slot-label">Operation State</span>
+              <strong>{formatTurnState(turnState)}</strong>
+            </div>
+          </div>
+
+          {lastAnswered ? (
+            <p className="event-strip">
+              <span>Last Q and A: {lastAnswered.question}</span>
+              <span className={lastAnswered.answer === "yes" ? "answer-badge answer-badge-yes" : "answer-badge answer-badge-no"}>
+                {lastAnswered.answer.toUpperCase()}
+              </span>
+            </p>
+          ) : null}
+
+          {roundResult ? (
+            <div className={resultCardClassName}>
+              <p className="result-title">Round result: {formatRoundReason(roundResult.reason)}</p>
+              {roundRevealPhase === "impact" ? (
+                <p className="result-subtitle">Decrypting field intel...</p>
+              ) : null}
+              <p className={areSecretsVisible ? "reveal-line" : "reveal-line reveal-line-hidden"}>
+                Your location was {areSecretsVisible ? yourSecretReveal?.toUpperCase() ?? "hidden" : "CLASSIFIED"}.
+              </p>
+              <p className={areSecretsVisible ? "reveal-line" : "reveal-line reveal-line-hidden"}>
+                Opponent location was {areSecretsVisible ? opponentSecretReveal?.toUpperCase() ?? "hidden" : "CLASSIFIED"}.
+              </p>
+              {roundRevealPhase === "settled" ? (
+                <p className="result-verdict">{roundResult.winnerPlayerId === playerId ? "Intel confirmed. Round secured." : "Cover blown. Regroup for the next round."}</p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {matchWinnerId ? (
+            <div className={matchResultCardClassName}>
+              <p className="result-title">Match winner: {matchWinnerId === playerId ? "You" : "Opponent"}</p>
+              <p className="result-verdict">{matchWinnerId === playerId ? "Operation complete. Championship secured." : "Operation lost. Queue another rematch."}</p>
+              <div className="controls controls-stack">
+                <button onClick={startNewGame}>Rematch</button>
+                <button onClick={startFreshRoom}>New Room</button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="controls controls-stack action-row">
+            <button onClick={endTurn} disabled={!canEndTurn}>End Turn</button>
+            <button onClick={openGuessModal} disabled={!canGuess}>Make Guess</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const chatWindowContent = (
+    <div className="desktop-panel-content desktop-panel-content-chat">
+      {incomingQuestion ? (
+        <div className="incoming-card incoming-card-alert">
+          <p className="incoming-label">Incoming interrogation</p>
+          <strong data-testid="incoming-question">{incomingQuestion}</strong>
+          <div className="controls controls-stack">
+            <button onClick={() => answerQuestion("yes")} disabled={!canAnswer}>Answer Yes</button>
+            <button onClick={() => answerQuestion("no")} disabled={!canAnswer}>Answer No</button>
+          </div>
         </div>
       ) : null}
 
-      <section className="panel panel-wide score-ribbon">
-        <article className={yourScoreCardClassName}>
-          <span className="score-label">{yourSideLabel} CELL</span>
-          <strong>{yourScore}</strong>
-          <span className="score-name">{lobby.displayName || "You"}</span>
-        </article>
-
-        <div className="score-center">
-          <p className={turnBannerClassName}>{turnBannerText}</p>
-          <p className="score-subtitle" data-testid="round-status">
-            Round {gameInfo?.roundNumber ?? "-"} Â· First to {CHAMPIONSHIP_TARGET_WINS} wins
-          </p>
-          {isRoundTransitioning && !matchWinnerId ? (
-            <p className="round-transition-banner" data-testid="round-transition-banner" aria-live="polite">
-              {nextRoundCountdownLabel ? `NEXT ROUND IN ${nextRoundCountdownLabel}` : "NEXT ROUND INITIALIZING..."}
-            </p>
-          ) : null}
-        </div>
-
-        <article className={opponentScoreCardClassName}>
-          <span className="score-label">{opponentSideLabel} CELL</span>
-          <strong>{opponentScore}</strong>
-          <span className="score-name">Opponent</span>
-        </article>
-      </section>
-
-      <section className="panel">
-        <h2>Mission Console</h2>
-
-        <div className="controls controls-stack">
-          <input
-            value={lobby.displayName}
-            onChange={onDisplayNameChange}
-            placeholder="Display name"
-          />
-          <select
-            value={selectedDifficulty}
-            onChange={(event) => setSelectedDifficulty(event.target.value as RoomDifficulty)}
-            aria-label="Room difficulty"
+      <div className="chat-list" ref={chatListRef} role="log" aria-live="polite" aria-relevant="additions text">
+        {chatMessages.length === 0 ? <p className="chat-empty-state">No messages yet.</p> : null}
+        {chatMessages.map((message, index) => (
+          <article
+            key={`${message.createdAt}-${index}`}
+            className={message.fromPlayerId === playerId ? "chat-bubble chat-bubble-self" : "chat-bubble chat-bubble-opponent"}
           >
-            {ROOM_DIFFICULTIES.map((difficulty) => (
-              <option key={difficulty} value={difficulty}>{formatDifficultyLabel(difficulty)}</option>
-            ))}
-          </select>
-          <p className="difficulty-hint">
-            Easy starts with 24 countries, Medium with 36, Hard with 48, and 007 uses the full global list.
-          </p>
-          <button onClick={createRoom}>Create Room</button>
-        </div>
+            <span className="chat-bubble-author">{message.fromPlayerId === playerId ? "You" : "Opponent"}</span>
+            <p className="chat-bubble-text">{message.text}</p>
+          </article>
+        ))}
+      </div>
 
-        <div className="controls controls-stack">
-          <input
-            value={lobby.roomCodeInput}
-            onChange={onRoomCodeChange}
-            placeholder="Room code"
-          />
-          <button onClick={joinRoom} disabled={!canJoin}>
-            Join Room
-          </button>
-        </div>
+      <div className="controls controls-stack chat-composer">
+        <input
+          value={chatInput}
+          onChange={(event) => setChatInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              sendChat();
+            }
+          }}
+          placeholder="Chat message"
+        />
+        <button onClick={sendChat} disabled={!chatInput.trim()}>Send Chat</button>
+      </div>
+    </div>
+  );
 
-        <div className="invite-strip" aria-live="polite">
-          <input value={inviteLink || "Create a room to generate invite link"} readOnly />
-          <button onClick={copyInviteLink} disabled={!inviteLink}>
-            Copy Invite Link
-          </button>
-        </div>
-        {inviteStatus ? <p className="invite-status">{inviteStatus}</p> : null}
-
-        <div className="controls controls-stack">
-          <input
-            value={questionInput}
-            onChange={(event) => setQuestionInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                askQuestion();
-              }
-            }}
-            placeholder="Ask a yes-or-no question"
-            disabled={!canAsk}
-          />
-          <button onClick={askQuestion} disabled={!canAsk || !questionInput.trim()}>
-            Ask
-          </button>
-        </div>
-
-        <div className="status-list">
-          <p>Current phase: {formatTurnState(turnState)}</p>
-          <p>Eliminated flags: {eliminatedCodes.length}</p>
-          <p>Round result: {roundResult ? formatRoundReason(roundResult.reason) : "pending"}</p>
-        </div>
-
-        {pendingQuestionText || pendingGuessCode || recentlyConfirmedFlagCode ? (
-          <div className="feedback-chip-row" aria-live="polite">
-            {pendingQuestionText ? <p className="feedback-chip feedback-chip-info">Question in flight</p> : null}
-            {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
-            {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
-          </div>
-        ) : null}
-      </section>
-
-      <section className="panel round-panel">
-        <h2>Intel Desk</h2>
-        {!gameInfo ? (
-          <p>Waiting for game start...</p>
-        ) : (
-          <>
-            <div className="secret-slot secret-slot-featured">
-              <div>
-                <span className="slot-label">Your Hidden Location</span>
-                <strong>{gameInfo.yourSecretFlag.toUpperCase()}</strong>
-              </div>
-              <img src={toFlagImage(gameInfo.yourSecretFlag)} alt={`${gameInfo.yourSecretFlag.toUpperCase()} secret flag`} loading="lazy" />
-            </div>
-
-            <div className="round-detail-grid">
-              <div className="detail-card">
-                <span className="slot-label">Active Agent</span>
-                <strong className="active-agent-value">{gameInfo.activePlayerId}</strong>
-              </div>
-              <div className="detail-card">
-                <span className="slot-label">Confirmed Intel</span>
-                <strong>{yourScore}</strong>
-              </div>
-              <div className="detail-card">
-                <span className="slot-label">Interrogation Round</span>
-                <strong>{gameInfo.roundNumber}</strong>
-              </div>
-              <div className="detail-card">
-                <span className="slot-label">Difficulty</span>
-                <strong>{roomDifficulty.toUpperCase()}</strong>
-              </div>
-              <div className="detail-card">
-                <span className="slot-label">Operation State</span>
-                <strong>{formatTurnState(turnState)}</strong>
-              </div>
-            </div>
-
-            {lastAnswered ? (
-              <p className="event-strip">
-                <span>Last Q and A: {lastAnswered.question}</span>
-                <span className={lastAnswered.answer === "yes" ? "answer-badge answer-badge-yes" : "answer-badge answer-badge-no"}>
-                  {lastAnswered.answer.toUpperCase()}
-                </span>
-              </p>
-            ) : null}
-
-            {roundResult ? (
-              <div className={resultCardClassName}>
-                <p className="result-title">Round result: {formatRoundReason(roundResult.reason)}</p>
-                {roundRevealPhase === "impact" ? (
-                  <p className="result-subtitle">Decrypting field intel...</p>
-                ) : null}
-                <p className={areSecretsVisible ? "reveal-line" : "reveal-line reveal-line-hidden"}>
-                  Your location was {areSecretsVisible ? yourSecretReveal?.toUpperCase() ?? "hidden" : "CLASSIFIED"}.
-                </p>
-                <p className={areSecretsVisible ? "reveal-line" : "reveal-line reveal-line-hidden"}>
-                  Opponent location was {areSecretsVisible ? opponentSecretReveal?.toUpperCase() ?? "hidden" : "CLASSIFIED"}.
-                </p>
-                {roundRevealPhase === "settled" ? (
-                  <p className="result-verdict">{roundResult.winnerPlayerId === playerId ? "Intel confirmed. Round secured." : "Cover blown. Regroup for the next round."}</p>
-                ) : null}
-              </div>
-            ) : null}
-
-            {matchWinnerId ? (
-              <div className={matchResultCardClassName}>
-                <p className="result-title">Match winner: {matchWinnerId === playerId ? "You" : "Opponent"}</p>
-                <p className="result-verdict">{matchWinnerId === playerId ? "Operation complete. Championship secured." : "Operation lost. Queue another rematch."}</p>
-                <div className="controls controls-stack">
-                  <button onClick={startNewGame}>Rematch</button>
-                  <button onClick={startFreshRoom}>New Room</button>
-                </div>
-              </div>
-            ) : null}
-
-            <div className="controls controls-stack action-row">
-              <button onClick={endTurn} disabled={!canEndTurn}>End Turn</button>
-              <button onClick={openGuessModal} disabled={!canGuess}>Make Guess</button>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="panel chat-panel">
-        <div className="section-heading">
-          <div>
-            <h2>Intercept Channel</h2>
-            <p className="section-subtitle">Questions, answers, and field chatter run through the same secure line.</p>
-          </div>
-        </div>
-
-        {incomingQuestion ? (
-          <div className="incoming-card incoming-card-alert">
-            <p className="incoming-label">Incoming interrogation</p>
-            <strong data-testid="incoming-question">{incomingQuestion}</strong>
-            <div className="controls controls-stack">
-              <button onClick={() => answerQuestion("yes")} disabled={!canAnswer}>Answer Yes</button>
-              <button onClick={() => answerQuestion("no")} disabled={!canAnswer}>Answer No</button>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="chat-list" ref={chatListRef} role="log" aria-live="polite" aria-relevant="additions text">
-          {chatMessages.length === 0 ? <p className="chat-empty-state">No messages yet.</p> : null}
-          {chatMessages.map((message, index) => (
-            <article
-              key={`${message.createdAt}-${index}`}
-              className={message.fromPlayerId === playerId ? "chat-bubble chat-bubble-self" : "chat-bubble chat-bubble-opponent"}
-            >
-              <span className="chat-bubble-author">{message.fromPlayerId === playerId ? "You" : "Opponent"}</span>
-              <p className="chat-bubble-text">{message.text}</p>
-            </article>
-          ))}
-        </div>
-
-        <div className="controls controls-stack chat-composer">
-          <input
-            value={chatInput}
-            onChange={(event) => setChatInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-                event.preventDefault();
-                sendChat();
-              }
-            }}
-            placeholder="Chat message"
-          />
-          <button onClick={sendChat} disabled={!chatInput.trim()}>Send Chat</button>
-        </div>
-      </section>
-
-      <section className="panel panel-wide board-panel">
-        <div className="section-heading">
-          <div>
-            <h2>World Intel Board</h2>
-            <p className="section-subtitle">Trace possible locations on the map. Hold Alt + wheel to zoom, or drag to pan. Eliminations only lock in after server confirmation.</p>
-          </div>
-          <p className="board-meta">{remainingFlags.length} candidate locations remaining</p>
-        </div>
-
+  return (
+    <main className="app-shell">
+      <div className="app-canvas-noise" aria-hidden="true" />
+      <div
+        ref={mapViewportRef}
+        className={mapCanvasClassName}
+        data-testid="map-canvas"
+        aria-label={`${activeFlagCodes.length} flag cards`}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div
-          ref={mapViewportRef}
-          className={isPanning ? "map-stage map-stage-panning" : "map-stage"}
-          aria-label="24 flag cards"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
+          className="map-world-layer"
+          style={{
+            transform: `translate(${wrappedPanX}px, ${pan.y}px) scale(${zoom})`,
+            "--marker-scale": `${1 / zoom}`
+          } as CSSProperties}
         >
-          <div
-            className="map-world-layer"
-            style={{
-              transform: `translate(${wrappedPanX}px, ${pan.y}px) scale(${zoom})`,
-              "--marker-scale": `${1 / zoom}`
-            } as CSSProperties}
-          >
-            {tileOffsets.map((tileOffset) => (
-              <div key={tileOffset} className="map-tile" style={{ left: `${tileOffset}px` }}>
-                <WorldMapBackdrop />
-              </div>
-            ))}
-            {activeFlagCodes.map((flagCode) => {
-              const marker = getMarkerForFlag(flagCode, flagMarkerPositions);
-              return (
-                <FlagMarker
-                  key={`${flagCode}-marker`}
-                  flagCode={flagCode}
-                  marker={marker}
-                  isEliminated={eliminatedCodes.includes(flagCode)}
-                  canEliminate={canEliminate}
-                  onEliminate={eliminateFlag}
-                />
-              );
-            })}
-          </div>
+          {tileOffsets.map((tileOffset) => (
+            <div key={tileOffset} className="map-tile" style={{ left: `${tileOffset}px` }}>
+              <WorldMapBackdrop />
+            </div>
+          ))}
+          {activeFlagCodes.map((flagCode) => {
+            const marker = getMarkerForFlag(flagCode, flagMarkerPositions);
+            return (
+              <FlagMarker
+                key={`${flagCode}-marker`}
+                flagCode={flagCode}
+                marker={marker}
+                isEliminated={eliminatedCodes.includes(flagCode)}
+                canEliminate={canEliminate}
+                onEliminate={eliminateFlag}
+              />
+            );
+          })}
+        </div>
+      </div>
 
-          <div className="map-zoom-controls" aria-label="Map zoom controls">
-            <button type="button" onClick={zoomOut} aria-label="Zoom out">-</button>
-            <button type="button" onClick={resetMapView} aria-label="Reset map view">o</button>
-            <button type="button" onClick={zoomIn} aria-label="Zoom in">+</button>
+      <div className="app-chrome">
+        <div className="hud-shell">
+          <header className={heroPanelClassName}>
+            <div>
+              <p className="eyebrow">Week 3 Build In Progress</p>
+              <h1>.FALSE_FLAG//Global Signal</h1>
+              <p className="status">{status}</p>
+            </div>
+            <div className="hero-right-column">
+              <div className="hero-actions">
+                <button type="button" onClick={openRulesModal}>How to Play</button>
+              </div>
+              <div className="hero-meta">
+                <span className={connected ? "meta-pill meta-pill-online" : "meta-pill"}>
+                  uplink {connected ? "online" : "offline"}
+                </span>
+                <span className="meta-pill">mission {currentMissionLabel}</span>
+                <span className="meta-pill">difficulty {roomDifficulty}</span>
+                <span className="meta-pill">room {roomCode ?? "none"}</span>
+                <span className="meta-pill">cell {seat ?? "pending"}</span>
+                <span className="meta-pill">agent {playerId ?? "pending"}</span>
+              </div>
+            </div>
+          </header>
+
+          {toastMessages.length > 0 ? (
+            <div className="toast-stack" aria-live="polite" aria-relevant="additions text">
+              {toastMessages.map((message) => (
+                <p key={message.id} className={`toast toast-${message.tone}`}>{message.text}</p>
+              ))}
+            </div>
+          ) : null}
+
+          <section className="panel panel-wide score-ribbon hud-score-ribbon" data-testid="score-ribbon">
+            <article className={yourScoreCardClassName}>
+              <span className="score-label">{yourSideLabel} CELL</span>
+              <strong>{yourScore}</strong>
+              <span className="score-name">{lobby.displayName || "You"}</span>
+            </article>
+
+            <div className="score-center">
+              <p className={turnBannerClassName}>{turnBannerText}</p>
+              <p className="score-subtitle" data-testid="round-status">
+                Round {gameInfo?.roundNumber ?? "-"} · First to {CHAMPIONSHIP_TARGET_WINS} wins
+              </p>
+              {isRoundTransitioning && !matchWinnerId ? (
+                <p className="round-transition-banner" data-testid="round-transition-banner" aria-live="polite">
+                  {nextRoundCountdownLabel ? `NEXT ROUND IN ${nextRoundCountdownLabel}` : "NEXT ROUND INITIALIZING..."}
+                </p>
+              ) : null}
+            </div>
+
+            <article className={opponentScoreCardClassName}>
+              <span className="score-label">{opponentSideLabel} CELL</span>
+              <strong>{opponentScore}</strong>
+              <span className="score-name">Opponent</span>
+            </article>
+          </section>
+        </div>
+
+        <section className="map-hud" data-testid="map-hud">
+          <div className="map-hud-copy">
+            <p className="desktop-window-kicker">atlas.kernel::world-grid</p>
+            <h2>World Signal Grid</h2>
+            <p className="section-subtitle">Hold Alt and scroll to zoom. Drag exposed canvas to pan. Move windows to uncover markers.</p>
           </div>
+          <div className="map-hud-toolbar">
+            <p className="board-meta" data-testid="candidate-count">{remainingFlags.length} candidate locations remaining</p>
+            <div className="map-zoom-controls" aria-label="Map zoom controls">
+              <button type="button" onClick={zoomOut} aria-label="Zoom out">-</button>
+              <button type="button" onClick={resetMapView} aria-label="Reset map view">o</button>
+              <button type="button" onClick={zoomIn} aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <div className="map-legend">
+            <span><i className="legend-dot legend-dot-live" /> Active candidate</span>
+            <span><i className="legend-dot legend-dot-dead" /> Eliminated candidate</span>
+          </div>
+        </section>
+
+        <div className={isDesktopWindowing ? "desktop-window-stage" : "desktop-window-stage desktop-window-stage-stacked"}>
+          <DesktopWindow
+            windowId="mission"
+            title="Mission Console"
+            subtitle="room control, question dispatch, and uplink routing"
+            layout={desktopWindows.mission}
+            interactive={isDesktopWindowing}
+            className="mission-window"
+            dataTestId="mission-window"
+            onFocus={focusDesktopWindow}
+            onLayoutChange={handleDesktopWindowLayoutChange}
+          >
+            {missionConsoleContent}
+          </DesktopWindow>
+
+          <DesktopWindow
+            windowId="intel"
+            title="Intel Desk"
+            subtitle="round telemetry, reveal sequence, and strike controls"
+            layout={desktopWindows.intel}
+            interactive={isDesktopWindowing}
+            className="round-panel intel-window"
+            dataTestId="intel-window"
+            onFocus={focusDesktopWindow}
+            onLayoutChange={handleDesktopWindowLayoutChange}
+          >
+            {intelDeskContent}
+          </DesktopWindow>
+
+          <DesktopWindow
+            windowId="chat"
+            title="Intercept Channel"
+            subtitle="questions, answers, and field chatter"
+            layout={desktopWindows.chat}
+            interactive={isDesktopWindowing}
+            className="chat-panel chat-window"
+            dataTestId="chat-window"
+            onFocus={focusDesktopWindow}
+            onLayoutChange={handleDesktopWindowLayoutChange}
+          >
+            {chatWindowContent}
+          </DesktopWindow>
         </div>
-        <div className="map-legend">
-          <span><i className="legend-dot legend-dot-live" /> Active candidate</span>
-          <span><i className="legend-dot legend-dot-dead" /> Eliminated candidate</span>
-        </div>
-      </section>
+      </div>
 
       {isGuessModalOpen ? (
         <div

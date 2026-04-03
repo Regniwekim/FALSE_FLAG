@@ -39,10 +39,10 @@ test("week 3 mobile portrait layout stays usable in active match", async ({ brow
   await mobilePage.getByRole("button", { name: "Join Room" }).click();
 
   await expectRoundNumber(mobilePage, 1);
-  await expect(mobilePage.locator(".score-ribbon")).toBeVisible();
+  await expect(mobilePage.getByTestId("score-ribbon")).toBeVisible();
   await expect(mobilePage.getByText(/YOUR TURN|OPPONENT TURN/i)).toBeVisible();
 
-  const mapStage = mobilePage.locator(".map-stage");
+  const mapStage = mobilePage.getByTestId("map-canvas");
   await expect(mapStage).toBeVisible();
   await expect(mobilePage.getByLabel("Map zoom controls")).toBeVisible();
 
@@ -54,6 +54,9 @@ test("week 3 mobile portrait layout stays usable in active match", async ({ brow
   const makeGuessButton = mobilePage.getByRole("button", { name: "Make Guess" });
   await makeGuessButton.scrollIntoViewIfNeeded();
   await expect(makeGuessButton).toBeVisible();
+  await expect(mobilePage.getByTestId("mission-window")).toBeVisible();
+  await expect(mobilePage.getByTestId("intel-window")).toBeVisible();
+  await expect(mobilePage.getByTestId("chat-window")).toBeVisible();
 
   await mobileContext.close();
   await hostContext.close();

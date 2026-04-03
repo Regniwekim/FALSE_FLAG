@@ -17,6 +17,39 @@ async function expectRoundNumber(page: Page, roundNumber: number): Promise<void>
   await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
 }
 
+async function clickFirstUncoveredMarker(page: Page): Promise<string> {
+  const markers = page.getByTestId("map-canvas").locator(".map-flag-card");
+  const count = await markers.count();
+
+  for (let index = 0; index < count; index += 1) {
+    const marker = markers.nth(index);
+    const box = await marker.boundingBox();
+    const label = await marker.getAttribute("aria-label");
+
+    if (!box || !label) {
+      continue;
+    }
+
+    const topMarkerLabel = await page.evaluate(({ x, y }) => {
+      const topElement = document.elementFromPoint(x, y);
+      return topElement?.closest(".map-flag-card")?.getAttribute("aria-label") ?? null;
+    }, {
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2
+    });
+
+    if (topMarkerLabel !== label) {
+      continue;
+    }
+
+    await expect(marker).toBeEnabled();
+    await marker.click();
+    return label;
+  }
+
+  throw new Error("Expected at least one uncovered map marker button");
+}
+
 test("two-player Week 2 gameplay loop works across browser contexts", async ({ browser, page }) => {
   const context2: BrowserContext = await browser.newContext();
   const page2 = await context2.newPage();
@@ -47,14 +80,7 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
 
   await expect(page.locator(".event-strip")).toContainText("YES");
 
-  const eliminableFlagButton = page.locator(".map-stage .map-flag-card:visible").first();
-  const eliminableFlagLabel = await eliminableFlagButton.getAttribute("aria-label");
-  if (!eliminableFlagLabel) {
-    throw new Error("Expected at least one visible eliminable flag button");
-  }
-
-  await expect(eliminableFlagButton).toBeEnabled();
-  await eliminableFlagButton.click();
+  const eliminableFlagLabel = await clickFirstUncoveredMarker(page);
   await expect(page.getByRole("button", { name: eliminableFlagLabel })).toHaveClass(/flag-card-eliminated/);
   await expect(page2.getByRole("button", { name: eliminableFlagLabel })).not.toHaveClass(/flag-card-eliminated/);
 
