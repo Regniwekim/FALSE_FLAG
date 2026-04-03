@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { FULL_FLAG_CATALOG, getDifficultyFlagCount, type RoomDifficulty } from "@flagwho/shared";
 import type { RoomState } from "./types.js";
 
 const ROOM_CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -7,10 +8,25 @@ function generateRoomCode(): string {
   return Array.from({ length: 6 }, () => ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)]).join("");
 }
 
+function shuffleFlags(flags: readonly string[]): string[] {
+  const pool = [...flags];
+  for (let index = pool.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [pool[index], pool[swapIndex]] = [pool[swapIndex], pool[index]];
+  }
+  return pool;
+}
+
+function selectFlagPool(difficulty: RoomDifficulty): string[] {
+  const shuffled = shuffleFlags(FULL_FLAG_CATALOG);
+  const targetCount = getDifficultyFlagCount(difficulty, shuffled.length);
+  return shuffled.slice(0, targetCount);
+}
+
 export class RoomManager {
   private rooms = new Map<string, RoomState>();
 
-  createRoom(socketId: string, displayName = "Player 1") {
+  createRoom(socketId: string, displayName = "Player 1", difficulty: RoomDifficulty = "easy") {
     let roomCode = generateRoomCode();
     while (this.rooms.has(roomCode)) {
       roomCode = generateRoomCode();
@@ -19,6 +35,8 @@ export class RoomManager {
     const playerId = randomUUID();
     const room: RoomState = {
       roomCode,
+      difficulty,
+      availableFlagCodes: selectFlagPool(difficulty),
       status: "waiting",
       players: [
         {

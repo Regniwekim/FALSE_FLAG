@@ -1,3 +1,5 @@
+import type { RoomDifficulty } from "@flagwho/shared";
+
 export interface PlayerState {
   playerId: string;
   socketId: string;
@@ -29,6 +31,8 @@ export interface ChatMessage {
 
 export interface RoomState {
   roomCode: string;
+  difficulty: RoomDifficulty;
+  availableFlagCodes: string[];
   players: PlayerState[];
   status: "waiting" | "in-game" | "match-over" | "closed";
   championship: {

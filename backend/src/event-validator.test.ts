@@ -6,6 +6,8 @@ import type { RoomState } from "./types.js";
 function roomWithState(turnState: RoomState["round"] extends infer _ ? "awaiting-question" | "awaiting-answer" | "awaiting-asker-actions" | "round-over" : never): RoomState {
   return {
     roomCode: "RM0001",
+    difficulty: "easy",
+    availableFlagCodes: ["us", "ca", "mx", "br", "fr", "de"],
     status: "in-game",
     players: [
       {

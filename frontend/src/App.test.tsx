@@ -3,6 +3,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { App } from "./App";
 import { CLIENT_TO_SERVER, SERVER_TO_CLIENT } from "@flagwho/shared";
 
+const TEST_FLAGS = [
+  "us", "ca", "mx", "cu", "br", "ar",
+  "co", "pe", "gb", "fr", "de", "it",
+  "za", "ng", "eg", "ke", "cn", "in",
+  "jp", "kr", "au", "nz", "tr", "sa"
+];
+
 type Listener = (payload?: any) => void;
 
 const mocked = vi.hoisted(() => {
@@ -51,13 +58,15 @@ describe("App turn/state control gating", () => {
     mocked.socket.emitLocal(SERVER_TO_CLIENT.ROOM_CREATED, {
       roomCode: "ABC123",
       playerId: "p1",
-      seat: "p1"
+      seat: "p1",
+      difficulty: "easy"
     });
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.GAME_STARTED, {
       roundNumber: 1,
       activePlayerId: "p1",
       yourSecretFlag: "us",
+      availableFlagCodes: TEST_FLAGS,
       yourBoardState: { eliminatedFlagCodes: [] }
     });
   }
@@ -103,13 +112,15 @@ describe("App turn/state control gating", () => {
     mocked.socket.emitLocal(SERVER_TO_CLIENT.ROOM_JOINED, {
       roomCode: "ABC123",
       playerId: "p2",
-      seat: "p2"
+      seat: "p2",
+      difficulty: "easy"
     });
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.GAME_STARTED, {
       roundNumber: 1,
       activePlayerId: "p1",
       yourSecretFlag: "ca",
+      availableFlagCodes: TEST_FLAGS,
       yourBoardState: { eliminatedFlagCodes: [] }
     });
 

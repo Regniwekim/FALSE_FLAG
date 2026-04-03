@@ -1,13 +1,12 @@
 import type { RoomState } from "./types.js";
-import { FLAG_CATALOG } from "./flag-catalog.js";
 
-function pickTwoDistinctFlags() {
-  const firstIndex = Math.floor(Math.random() * FLAG_CATALOG.length);
-  let secondIndex = Math.floor(Math.random() * FLAG_CATALOG.length);
+function pickTwoDistinctFlags(availableFlagCodes: string[]) {
+  const firstIndex = Math.floor(Math.random() * availableFlagCodes.length);
+  let secondIndex = Math.floor(Math.random() * availableFlagCodes.length);
   while (secondIndex === firstIndex) {
-    secondIndex = Math.floor(Math.random() * FLAG_CATALOG.length);
+    secondIndex = Math.floor(Math.random() * availableFlagCodes.length);
   }
-  return [FLAG_CATALOG[firstIndex], FLAG_CATALOG[secondIndex]];
+  return [availableFlagCodes[firstIndex], availableFlagCodes[secondIndex]];
 }
 
 export class GameEngine {
@@ -15,8 +14,11 @@ export class GameEngine {
     if (room.players.length !== 2) {
       throw new Error("Round initialization requires exactly two players");
     }
+    if (room.availableFlagCodes.length < 2) {
+      throw new Error("Round initialization requires at least two available flags");
+    }
 
-    const [flagP1, flagP2] = pickTwoDistinctFlags();
+    const [flagP1, flagP2] = pickTwoDistinctFlags(room.availableFlagCodes);
     room.players[0].secretFlagCode = flagP1;
     room.players[1].secretFlagCode = flagP2;
     room.players[0].eliminatedFlagCodes = [];
@@ -44,6 +46,7 @@ export class GameEngine {
       roundNumber: room.round.roundNumber,
       activePlayerId: room.round.activePlayerId,
       yourSecretFlag: player.secretFlagCode,
+      availableFlagCodes: room.availableFlagCodes,
       yourBoardState: {
         eliminatedFlagCodes: player.eliminatedFlagCodes
       }

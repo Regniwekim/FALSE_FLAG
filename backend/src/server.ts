@@ -5,8 +5,10 @@ import { Server, type Socket } from "socket.io";
 import {
   CLIENT_TO_SERVER,
   ERROR_CODES,
+  ROOM_DIFFICULTIES,
   SERVER_TO_CLIENT,
   type CreateRoomPayload,
+  type RoomDifficulty,
   type JoinRoomPayload,
   type AskQuestionPayload,
   type AnswerQuestionPayload,
@@ -46,6 +48,13 @@ function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]) {
 
 function emitError(socket: Socket, code: string, message: string) {
   socket.emit(SERVER_TO_CLIENT.ACTION_ERROR, { code, message });
+}
+
+function normalizeDifficulty(candidate: unknown): RoomDifficulty {
+  if (typeof candidate !== "string") {
+    return "easy";
+  }
+  return ROOM_DIFFICULTIES.includes(candidate as RoomDifficulty) ? (candidate as RoomDifficulty) : "easy";
 }
 
 function emitPrivateState(io: Server, gameEngine: GameEngine, room: RoomState) {
@@ -115,12 +124,14 @@ export function createRealtimeApp() {
         return;
       }
 
-      const { room, player } = roomManager.createRoom(socket.id, payload.displayName ?? "Player 1");
+      const difficulty = normalizeDifficulty(payload.difficulty);
+      const { room, player } = roomManager.createRoom(socket.id, payload.displayName ?? "Player 1", difficulty);
       socket.join(room.roomCode);
       socket.emit(SERVER_TO_CLIENT.ROOM_CREATED, {
         roomCode: room.roomCode,
         playerId: player.playerId,
-        seat: player.seat
+        seat: player.seat,
+        difficulty: room.difficulty
       });
     });
 
@@ -144,7 +155,8 @@ export function createRealtimeApp() {
       socket.emit(SERVER_TO_CLIENT.ROOM_JOINED, {
         roomCode: room.roomCode,
         playerId: player.playerId,
-        seat: player.seat
+        seat: player.seat,
+        difficulty: room.difficulty
       });
 
       io.to(room.roomCode).emit(SERVER_TO_CLIENT.PLAYER_JOINED, {

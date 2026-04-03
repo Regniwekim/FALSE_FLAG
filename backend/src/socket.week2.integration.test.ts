@@ -96,7 +96,9 @@ describe("Week 2 socket handlers", () => {
     const p1Start = waitForEvent<GameStartedPayload>(p1, SERVER_TO_CLIENT.GAME_STARTED);
     const p2Start = waitForEvent<GameStartedPayload>(p2, SERVER_TO_CLIENT.GAME_STARTED);
     p2.emit(CLIENT_TO_SERVER.JOIN_ROOM, { roomCode: roomCreated.roomCode, displayName: "P2" } satisfies JoinRoomPayload);
-    await Promise.all([p1Start, p2Start]);
+    const [p1Started] = await Promise.all([p1Start, p2Start]);
+    const eliminatableFlag = p1Started.availableFlagCodes.find((flagCode) => flagCode !== p1Started.yourSecretFlag)
+      ?? p1Started.availableFlagCodes[0];
 
     const incomingQuestion = waitForEvent(p2, SERVER_TO_CLIENT.INCOMING_QUESTION);
     p1.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: "Is it in Europe?" });
@@ -112,10 +114,10 @@ describe("Week 2 socket handlers", () => {
       p2BoardUpdated = true;
     });
 
-    p1.emit(CLIENT_TO_SERVER.ELIMINATE_FLAG, { flagCode: "us" });
+    p1.emit(CLIENT_TO_SERVER.ELIMINATE_FLAG, { flagCode: eliminatableFlag });
     const update = await boardUpdated;
 
-    expect(update.eliminatedFlagCodes).toContain("us");
+    expect(update.eliminatedFlagCodes).toContain(eliminatableFlag);
     expect(p2BoardUpdated).toBe(false);
   });
 

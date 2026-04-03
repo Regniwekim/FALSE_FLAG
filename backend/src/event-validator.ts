@@ -1,6 +1,6 @@
 import { ERROR_CODES, type ErrorCode } from "@flagwho/shared";
 import type { RoomState } from "./types.js";
-import { isValidFlagCode } from "./flag-catalog.js";
+import { isFlagCodeInList } from "./flag-catalog.js";
 
 export interface ValidationResult {
   ok: boolean;
@@ -60,7 +60,7 @@ export class EventValidator {
     if (room.round.activePlayerId !== actorPlayerId) {
       return fail(ERROR_CODES.NOT_YOUR_TURN, "Only the active player can make a guess.");
     }
-    if (!isValidFlagCode(guessedFlagCode)) {
+    if (!isFlagCodeInList(guessedFlagCode, room.availableFlagCodes)) {
       return fail(ERROR_CODES.INVALID_FLAG, "Guessed flag code is invalid.");
     }
     return { ok: true };
@@ -73,7 +73,7 @@ export class EventValidator {
     if (room.round.activePlayerId !== actorPlayerId) {
       return fail(ERROR_CODES.NOT_YOUR_TURN, "Only the active player can eliminate a flag.");
     }
-    if (!isValidFlagCode(flagCode)) {
+    if (!isFlagCodeInList(flagCode, room.availableFlagCodes)) {
       return fail(ERROR_CODES.INVALID_FLAG, "Flag code is invalid.");
     }
 

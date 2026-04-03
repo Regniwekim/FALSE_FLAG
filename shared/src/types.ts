@@ -1,3 +1,5 @@
+import type { RoomDifficulty } from "./flags.js";
+
 export type Seat = "p1" | "p2";
 
 export type TurnState =
@@ -15,6 +17,7 @@ export interface ActionErrorPayload {
 
 export interface CreateRoomPayload {
   displayName?: string;
+  difficulty?: RoomDifficulty;
 }
 
 export interface JoinRoomPayload {
@@ -52,12 +55,14 @@ export interface RoomCreatedPayload {
   roomCode: string;
   playerId: string;
   seat: Seat;
+  difficulty: RoomDifficulty;
 }
 
 export interface GameStartedPayload {
   roundNumber: number;
   activePlayerId: string;
   yourSecretFlag: string;
+  availableFlagCodes: string[];
   yourBoardState: {
     eliminatedFlagCodes: string[];
   };

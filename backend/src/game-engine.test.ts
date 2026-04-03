@@ -5,6 +5,8 @@ import type { RoomState } from "./types.js";
 function buildRoom(): RoomState {
   return {
     roomCode: "ABC123",
+    difficulty: "easy",
+    availableFlagCodes: ["us", "ca", "mx", "br", "fr", "de"],
     status: "waiting",
     players: [
       {

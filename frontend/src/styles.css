@@ -103,6 +103,13 @@ h2 {
   font-size: 0.86rem;
 }
 
+.difficulty-hint {
+  margin: 0;
+  color: #B0B0FF;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 .controls-stack {
   flex-wrap: wrap;
 }
@@ -172,6 +179,24 @@ button:disabled {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.hero-right-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.hero-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.hero-actions button {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .meta-pill {
@@ -740,6 +765,40 @@ button:disabled {
   justify-content: flex-end;
 }
 
+.rules-modal {
+  width: min(620px, 100%);
+}
+
+.rules-modal-content {
+  margin-top: 12px;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  padding-right: 8px;
+  color: #e9f6ff;
+  line-height: 1.45;
+}
+
+.rules-modal-content h3 {
+  margin: 14px 0 8px;
+  font-size: 1rem;
+  color: #FF10F0;
+  letter-spacing: 0.05em;
+}
+
+.rules-modal-content p {
+  margin: 0 0 10px;
+}
+
+.rules-modal-content ol,
+.rules-modal-content ul {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+
+.rules-modal-content li {
+  margin: 0 0 6px;
+}
+
 .map-legend {
   display: flex;
   gap: 18px;
@@ -842,6 +901,12 @@ button:disabled {
     align-items: stretch;
   }
 
+  .hero-right-column,
+  .hero-actions {
+    align-items: stretch;
+    justify-content: flex-start;
+  }
+
   .round-detail-grid,
   .score-ribbon {
     grid-template-columns: 1fr;
@@ -864,7 +929,8 @@ button:disabled {
 @media (max-width: 520px) {
   .controls,
   .hero-meta,
-  .invite-strip {
+  .invite-strip,
+  .hero-actions {
     flex-direction: column;
   }
 
@@ -890,5 +956,9 @@ button:disabled {
 
   .guess-modal {
     padding: 16px;
+  }
+
+  .rules-modal-content {
+    max-height: min(62vh, 460px);
   }
 }

@@ -1,6 +1,8 @@
 ﻿import { memo, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import {
   CLIENT_TO_SERVER,
+  FULL_FLAG_CATALOG,
+  ROOM_DIFFICULTIES,
   SERVER_TO_CLIENT,
   type RoomCreatedPayload,
   type GameStartedPayload,
@@ -11,7 +13,8 @@ import {
   type BoardUpdatedPayload,
   type ChatMessageEventPayload,
   type SyncStatePayload,
-  type RoundOverPayload
+  type RoundOverPayload,
+  type RoomDifficulty
 } from "@flagwho/shared";
 import { socket } from "./socket";
 import {
@@ -28,12 +31,13 @@ type LobbyState = {
   displayName: string;
 };
 
-const FLAG_CODES = [
-  "us", "ca", "mx", "cu", "br", "ar",
-  "co", "pe", "gb", "fr", "de", "it",
-  "za", "ng", "eg", "ke", "cn", "in",
-  "jp", "kr", "au", "nz", "tr", "sa"
-];
+const DEFAULT_FLAG_CODES = [...FULL_FLAG_CATALOG.slice(0, 24)];
+const DIFFICULTY_LABELS: Record<RoomDifficulty, string> = {
+  easy: "Easy (24 countries)",
+  medium: "Medium (36 countries)",
+  hard: "Hard (48 countries)",
+  "007": "007 (Full list)"
+};
 
 const MAP_WIDTH = 2000;
 const MAP_HEIGHT = 857;
@@ -49,6 +53,29 @@ function formatTurnState(turnState: TurnState | null): string {
 
 function formatRoundReason(reason: RoundOverPayload["reason"]): string {
   return reason === "correct-guess" ? "Correct guess" : "Wrong guess";
+}
+
+function formatDifficultyLabel(difficulty: RoomDifficulty): string {
+  return DIFFICULTY_LABELS[difficulty];
+}
+
+function fallbackMarkerForFlag(flagCode: string): { x: number; y: number } {
+  let hash = 2166136261;
+  for (const char of flagCode) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  const normalized = (hash >>> 0) / 4294967295;
+  const normalizedSecondary = ((hash >>> 9) ^ (hash >>> 3)) / 4294967295;
+  return {
+    x: Math.round(140 + normalized * (MAP_WIDTH - 280)),
+    y: Math.round(120 + normalizedSecondary * (MAP_HEIGHT - 220))
+  };
+}
+
+function getMarkerForFlag(flagCode: string, markerPositions: FlagMarkerPositions): { x: number; y: number } {
+  return markerPositions[flagCode] ?? fallbackMarkerForFlag(flagCode);
 }
 
 type FlagMarkerProps = {
@@ -125,6 +152,8 @@ export function App() {
   const [roomCode, setRoomCode] = useState<string | null>(null);
   const [gameInfo, setGameInfo] = useState<GameStartedPayload | null>(null);
   const [lobby, setLobby] = useState<LobbyState>({ roomCodeInput: "", displayName: "" });
+  const [selectedDifficulty, setSelectedDifficulty] = useState<RoomDifficulty>("easy");
+  const [roomDifficulty, setRoomDifficulty] = useState<RoomDifficulty>("easy");
   const [turnState, setTurnState] = useState<TurnState | null>(null);
   const [questionInput, setQuestionInput] = useState("");
   const [chatInput, setChatInput] = useState("");
@@ -136,9 +165,10 @@ export function App() {
   const [score, setScore] = useState<Record<string, number>>({});
   const [matchWinnerId, setMatchWinnerId] = useState<string | null>(null);
   const [isRoundTransitioning, setIsRoundTransitioning] = useState(false);
-  const [guessFlagCode, setGuessFlagCode] = useState(FLAG_CODES[0]);
+  const [guessFlagCode, setGuessFlagCode] = useState<string>(DEFAULT_FLAG_CODES[0]);
   const [isGuessPickerOpen, setIsGuessPickerOpen] = useState(false);
   const [isGuessModalOpen, setIsGuessModalOpen] = useState(false);
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -147,6 +177,7 @@ export function App() {
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
   const guessModalRef = useRef<HTMLDivElement | null>(null);
+  const rulesModalRef = useRef<HTMLDivElement | null>(null);
   const guessPickerTriggerRef = useRef<HTMLButtonElement | null>(null);
   const guessPickerOptionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const guessPickerTypeaheadRef = useRef("");
@@ -269,6 +300,7 @@ export function App() {
       setPlayerId(payload.playerId);
       setSeat(payload.seat);
       setRoomCode(payload.roomCode);
+      setRoomDifficulty(payload.difficulty);
       setStatus(`Room ${payload.roomCode} created. Waiting for opponent.`);
     });
 
@@ -276,6 +308,7 @@ export function App() {
       setPlayerId(payload.playerId);
       setSeat(payload.seat);
       setRoomCode(payload.roomCode);
+      setRoomDifficulty(payload.difficulty);
       setStatus(`Joined room ${payload.roomCode}. Starting game...`);
     });
 
@@ -289,7 +322,7 @@ export function App() {
       setMatchWinnerId(null);
       setIsRoundTransitioning(false);
       setIsGuessModalOpen(false);
-      setGuessFlagCode(FLAG_CODES[0]);
+      setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("Game started");
     });
 
@@ -304,7 +337,7 @@ export function App() {
       setMatchWinnerId(null);
       setIsRoundTransitioning(false);
       setIsGuessModalOpen(false);
-      setGuessFlagCode(FLAG_CODES[0]);
+      setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("New game started");
     });
 
@@ -399,7 +432,10 @@ export function App() {
   }, [roomCode]);
 
   const createRoom = () => {
-    socket.emit(CLIENT_TO_SERVER.CREATE_ROOM, { displayName: lobby.displayName || undefined });
+    socket.emit(CLIENT_TO_SERVER.CREATE_ROOM, {
+      displayName: lobby.displayName || undefined,
+      difficulty: selectedDifficulty
+    });
   };
 
   const joinRoom = () => {
@@ -419,6 +455,7 @@ export function App() {
   };
 
   const isYourTurn = !!(gameInfo && playerId && gameInfo.activePlayerId === playerId);
+  const activeFlagCodes = gameInfo?.availableFlagCodes.length ? gameInfo.availableFlagCodes : DEFAULT_FLAG_CODES;
   const canAsk = !!(gameInfo && isYourTurn && turnState === "awaiting-question");
   const canAnswer = !!(gameInfo && !isYourTurn && turnState === "awaiting-answer" && incomingQuestion);
   const canEliminate = !!(gameInfo && isYourTurn && turnState === "awaiting-asker-actions");
@@ -430,12 +467,12 @@ export function App() {
   );
 
   useEffect(() => {
-    const nextGuessOptions = FLAG_CODES.filter((flagCode) => !eliminatedCodes.includes(flagCode));
-    const fallbackOptions = nextGuessOptions.length > 0 ? nextGuessOptions : FLAG_CODES;
+    const nextGuessOptions = activeFlagCodes.filter((flagCode) => !eliminatedCodes.includes(flagCode));
+    const fallbackOptions = nextGuessOptions.length > 0 ? nextGuessOptions : activeFlagCodes;
     if (!fallbackOptions.includes(guessFlagCode)) {
       setGuessFlagCode(fallbackOptions[0]);
     }
-  }, [eliminatedCodes, guessFlagCode]);
+  }, [activeFlagCodes, eliminatedCodes, guessFlagCode]);
 
   useEffect(() => {
     if (!canGuess) {
@@ -508,6 +545,69 @@ export function App() {
   }, [closeGuessModal, isGuessModalOpen]);
 
   useEffect(() => {
+    if (!isRulesModalOpen) {
+      return;
+    }
+
+    const modal = rulesModalRef.current;
+    if (!modal) {
+      return;
+    }
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const getFocusableElements = () => Array.from(
+      modal.querySelectorAll<HTMLElement>(
+        "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
+      )
+    );
+
+    window.setTimeout(() => {
+      const focusable = getFocusableElements();
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }, 0);
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setIsRulesModalOpen(false);
+        previouslyFocused?.focus();
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) {
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+        return;
+      }
+
+      if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isRulesModalOpen]);
+
+  useEffect(() => {
     if (!chatListRef.current) {
       return;
     }
@@ -574,6 +674,14 @@ export function App() {
     }
     setIsGuessPickerOpen(false);
     setIsGuessModalOpen(true);
+  };
+
+  const closeRulesModal = () => {
+    setIsRulesModalOpen(false);
+  };
+
+  const openRulesModal = () => {
+    setIsRulesModalOpen(true);
   };
 
   const startFreshRoom = () => {
@@ -742,8 +850,8 @@ export function App() {
   const wrappedPanX = pan.x - Math.round(pan.x / tileSpan) * tileSpan;
   const tileOffsets = (import.meta.env.MODE === "test" ? [0] : [-1, 0, 1]).map((offset) => offset * MAP_WIDTH);
 
-  const remainingFlags = FLAG_CODES.filter((flagCode) => !eliminatedCodes.includes(flagCode));
-  const guessOptions = remainingFlags.length > 0 ? remainingFlags : FLAG_CODES;
+  const remainingFlags = activeFlagCodes.filter((flagCode) => !eliminatedCodes.includes(flagCode));
+  const guessOptions = remainingFlags.length > 0 ? remainingFlags : activeFlagCodes;
   const guessPickerMenuId = "guess-flag-options";
   const selectedGuessIndex = Math.max(0, guessOptions.indexOf(guessFlagCode));
 
@@ -909,14 +1017,20 @@ export function App() {
           <h1>.FALSE_FLAG//Global Signal</h1>
           <p className="status">{status}</p>
         </div>
-        <div className="hero-meta">
+        <div className="hero-right-column">
+          <div className="hero-actions">
+            <button type="button" onClick={openRulesModal}>How to Play</button>
+          </div>
+          <div className="hero-meta">
           <span className={connected ? "meta-pill meta-pill-online" : "meta-pill"}>
             uplink {connected ? "online" : "offline"}
           </span>
           <span className="meta-pill">mission {currentMissionLabel}</span>
+          <span className="meta-pill">difficulty {roomDifficulty}</span>
           <span className="meta-pill">room {roomCode ?? "none"}</span>
           <span className="meta-pill">cell {seat ?? "pending"}</span>
           <span className="meta-pill">agent {playerId ?? "pending"}</span>
+          </div>
         </div>
       </header>
 
@@ -953,6 +1067,18 @@ export function App() {
             onChange={onDisplayNameChange}
             placeholder="Display name"
           />
+          <select
+            value={selectedDifficulty}
+            onChange={(event) => setSelectedDifficulty(event.target.value as RoomDifficulty)}
+            aria-label="Room difficulty"
+          >
+            {ROOM_DIFFICULTIES.map((difficulty) => (
+              <option key={difficulty} value={difficulty}>{formatDifficultyLabel(difficulty)}</option>
+            ))}
+          </select>
+          <p className="difficulty-hint">
+            Easy starts with 24 countries, Medium with 36, Hard with 48, and 007 uses the full global list.
+          </p>
           <button onClick={createRoom}>Create Room</button>
         </div>
 
@@ -1026,6 +1152,10 @@ export function App() {
               <div className="detail-card">
                 <span className="slot-label">Interrogation Round</span>
                 <strong>{gameInfo.roundNumber}</strong>
+              </div>
+              <div className="detail-card">
+                <span className="slot-label">Difficulty</span>
+                <strong>{roomDifficulty.toUpperCase()}</strong>
               </div>
               <div className="detail-card">
                 <span className="slot-label">Operation State</span>
@@ -1142,8 +1272,8 @@ export function App() {
                 <WorldMapBackdrop />
               </div>
             ))}
-            {FLAG_CODES.map((flagCode) => {
-              const marker = flagMarkerPositions[flagCode];
+            {activeFlagCodes.map((flagCode) => {
+              const marker = getMarkerForFlag(flagCode, flagMarkerPositions);
               return (
                 <FlagMarker
                   key={`${flagCode}-marker`}
@@ -1233,6 +1363,58 @@ export function App() {
               <button onClick={closeGuessModal}>
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {isRulesModalOpen ? (
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeRulesModal();
+            }
+          }}
+        >
+          <div ref={rulesModalRef} className="guess-modal rules-modal" role="dialog" aria-modal="true" aria-labelledby="rules-modal-title">
+            <h2 id="rules-modal-title">How to Play</h2>
+            <div className="rules-modal-content">
+              <p>You and one opponent each get a secret country flag. The first player to win 3 rounds wins the match.</p>
+
+              <h3>Round Flow</h3>
+              <ol>
+                <li>On your turn, ask one yes/no question about your opponent&apos;s secret country.</li>
+                <li>Your opponent answers yes or no.</li>
+                <li>Use the answer to eliminate flags on your board.</li>
+                <li>End your turn, or make a guess if you are confident.</li>
+              </ol>
+
+              <h3>Board Controls</h3>
+              <ul>
+                <li>Click a flag card on the map to eliminate it.</li>
+                <li>Drag to pan the map.</li>
+                <li>Use Alt + mouse wheel (or pinch on touch devices) to zoom.</li>
+                <li>Use the + / o / - buttons to zoom in, reset, and zoom out.</li>
+              </ul>
+
+              <h3>Winning and Losing a Round</h3>
+              <ul>
+                <li>Correct guess: you win the round.</li>
+                <li>Wrong guess: you lose the round immediately.</li>
+                <li>After each round, both secret flags are revealed.</li>
+              </ul>
+
+              <h3>Quick Tips</h3>
+              <ul>
+                <li>Ask broad questions first to remove many possibilities.</li>
+                <li>Track eliminated flags carefully before guessing.</li>
+                <li>Use chat for coordination and mind games.</li>
+              </ul>
+            </div>
+            <div className="controls controls-stack modal-actions">
+              <button onClick={closeRulesModal}>Close</button>
             </div>
           </div>
         </div>
