@@ -1556,7 +1556,7 @@ button:disabled {
 }
 
 .map-flag-card.flag-card-eliminated {
-  animation: eliminated-pulse-map 180ms ease-out;
+  animation: eliminated-pulse 180ms ease-out;
 }
 
 .flag-card-eliminated::after {
@@ -1933,20 +1933,6 @@ button:disabled {
 
   100% {
     transform: scale(1);
-  }
-}
-
-@keyframes eliminated-pulse-map {
-  0% {
-    transform: translate(-50%, -100%) scale(var(--marker-scale, 1));
-  }
-
-  55% {
-    transform: translate(-50%, -100%) scale(calc(var(--marker-scale, 1) * 0.96));
-  }
-
-  100% {
-    transform: translate(-50%, -100%) scale(var(--marker-scale, 1));
   }
 }
 
