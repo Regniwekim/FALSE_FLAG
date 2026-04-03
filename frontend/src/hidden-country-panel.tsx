@@ -66,15 +66,6 @@ function formatList(values: string[]): string {
   return values.length > 0 ? values.join(", ") : "Unavailable";
 }
 
-function formatNumberWithAsOf(value: number | null, asOf: string | null): string {
-  if (value === null) {
-    return "Unavailable";
-  }
-
-  const asOfLabel = formatDateLabel(asOf);
-  return asOfLabel ? `${integerFormatter.format(value)} (${asOfLabel})` : integerFormatter.format(value);
-}
-
 function formatGdpValue(value: number | null, currency: string | null, asOf: string | null): string {
   if (value === null) {
     return "Unavailable";
@@ -83,10 +74,6 @@ function formatGdpValue(value: number | null, currency: string | null, asOf: str
   const metadataBits = [currency, formatDateLabel(asOf)].filter((entry): entry is string => Boolean(entry));
   const formattedValue = integerFormatter.format(value);
   return metadataBits.length > 0 ? `${formattedValue} (${metadataBits.join(", ")})` : formattedValue;
-}
-
-function renderUnavailablePlaceholder(): ReactNode {
-  return <span className="secret-country-unavailable">Unavailable</span>;
 }
 
 function buildCountryInfoboxRows(
@@ -100,31 +87,25 @@ function buildCountryInfoboxRows(
         {wikipediaTitle}
       </a>
     )
-    : renderUnavailablePlaceholder();
+    : null;
 
-  const wikidataLink = countryInfo?.source.wikidataId
-    ? (
-      <a href={`https://www.wikidata.org/wiki/${countryInfo.source.wikidataId}`} rel="noreferrer" target="_blank">
-        {countryInfo.source.wikidataId}
-      </a>
-    )
-    : renderUnavailablePlaceholder();
+  const populationValue = countryInfo?.population.value ?? null;
 
-  return [
-    { label: "Capital", value: formatList(countryInfo?.capitals ?? []) },
-    { label: "Largest city", value: countryInfo?.largestCity ?? renderUnavailablePlaceholder() },
-    { label: "Continent", value: formatList(countryInfo?.continents ?? []) },
-    { label: "Region", value: formatList(countryInfo?.regions ?? []) },
-    { label: "Population", value: formatNumberWithAsOf(countryInfo?.population.value ?? null, countryInfo?.population.asOf ?? null) },
-    { label: "Languages", value: formatList(countryInfo?.officialLanguages ?? []) },
-    { label: "Head of state", value: countryInfo?.headsOfState.values.length ? formatList(countryInfo.headsOfState.values) + (formatDateLabel(countryInfo.headsOfState.asOf) ? ` (${formatDateLabel(countryInfo.headsOfState.asOf)})` : "") : renderUnavailablePlaceholder() },
-    { label: "Nominal GDP", value: formatGdpValue(countryInfo?.gdpNominal.value ?? null, countryInfo?.gdpNominal.currency ?? null, countryInfo?.gdpNominal.asOf ?? null) },
-    { label: "Currency", value: formatList(countryInfo?.currencies ?? []) },
-    { label: "Time zone", value: formatList(countryInfo?.timeZones ?? []) },
-    { label: "Wikipedia", value: wikipediaLink },
-    { label: "Wikidata", value: wikidataLink },
-    { label: "Refreshed", value: formatDateLabel(countryInfo?.lastEnrichedAt ?? null) ?? renderUnavailablePlaceholder() }
+  const rows: (CountryInfoboxRow | null)[] = [
+    (countryInfo?.capitals?.length) ? { label: "Capital", value: formatList(countryInfo.capitals) } : null,
+    countryInfo?.largestCity ? { label: "Largest city", value: countryInfo.largestCity } : null,
+    (countryInfo?.continents?.length) ? { label: "Continent", value: formatList(countryInfo.continents) } : null,
+    (countryInfo?.regions?.length) ? { label: "Region", value: formatList(countryInfo.regions) } : null,
+    populationValue !== null ? { label: "Population", value: integerFormatter.format(populationValue) } : null,
+    (countryInfo?.officialLanguages?.length) ? { label: "Languages", value: formatList(countryInfo.officialLanguages) } : null,
+    countryInfo?.headsOfState.values.length ? { label: "Head of state", value: formatList(countryInfo.headsOfState.values) } : null,
+    countryInfo?.gdpNominal.value !== null && countryInfo?.gdpNominal.value !== undefined ? { label: "Nominal GDP", value: formatGdpValue(countryInfo.gdpNominal.value, countryInfo.gdpNominal.currency ?? null, countryInfo.gdpNominal.asOf ?? null) } : null,
+    (countryInfo?.currencies?.length) ? { label: "Currency", value: formatList(countryInfo.currencies) } : null,
+    (countryInfo?.timeZones?.length) ? { label: "Time zone", value: formatList(countryInfo.timeZones) } : null,
+    wikipediaLink ? { label: "Wikipedia", value: wikipediaLink } : null
   ];
+
+  return rows.filter((row): row is CountryInfoboxRow => row !== null);
 }
 
 function buildCompactCountryInfoboxRows(
@@ -132,15 +113,20 @@ function buildCompactCountryInfoboxRows(
 ): CountryInfoboxRow[] {
   const primaryRegion = countryInfo?.regions[0] ?? null;
   const primaryContinent = countryInfo?.continents[0] ?? null;
+  const populationValue = countryInfo?.population.value ?? null;
 
-  return [
-    { label: "Capital", value: formatList(countryInfo?.capitals ?? []) },
-    {
-      label: primaryRegion ? "Region" : "Continent",
-      value: primaryRegion ?? primaryContinent ?? renderUnavailablePlaceholder()
-    },
-    { label: "Population", value: formatNumberWithAsOf(countryInfo?.population.value ?? null, countryInfo?.population.asOf ?? null) }
+  const rows: (CountryInfoboxRow | null)[] = [
+    (countryInfo?.capitals?.length) ? { label: "Capital", value: formatList(countryInfo.capitals) } : null,
+    (primaryRegion || primaryContinent)
+      ? {
+        label: primaryRegion ? "Region" : "Continent",
+        value: primaryRegion ?? primaryContinent!
+      }
+      : null,
+    populationValue !== null ? { label: "Population", value: integerFormatter.format(populationValue) } : null
   ];
+
+  return rows.filter((row): row is CountryInfoboxRow => row !== null);
 }
 
 function CountryInfoboxRows({ rows }: { rows: CountryInfoboxRow[] }) {

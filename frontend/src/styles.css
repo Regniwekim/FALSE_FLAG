@@ -260,6 +260,58 @@ body {
   background:
     linear-gradient(180deg, rgba(7, 10, 24, 0.24), rgba(255, 16, 240, 0.03)),
     linear-gradient(180deg, rgba(10, 14, 39, 0.88), rgba(9, 6, 18, 0.92));
+  /* Firefox scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 240, 255, 0.38) rgba(5, 8, 20, 0.5);
+}
+
+/* ── Spy-terminal scrollbar styling ── */
+
+.desktop-window-body::-webkit-scrollbar,
+.intel-history-wrap::-webkit-scrollbar,
+.chat-list::-webkit-scrollbar,
+.guess-picker-menu::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.desktop-window-body::-webkit-scrollbar-track,
+.intel-history-wrap::-webkit-scrollbar-track,
+.chat-list::-webkit-scrollbar-track,
+.guess-picker-menu::-webkit-scrollbar-track {
+  background: rgba(5, 8, 20, 0.5);
+  border-radius: 3px;
+}
+
+.desktop-window-body::-webkit-scrollbar-thumb,
+.intel-history-wrap::-webkit-scrollbar-thumb,
+.chat-list::-webkit-scrollbar-thumb,
+.guess-picker-menu::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.38);
+  border-radius: 3px;
+  box-shadow: 0 0 4px rgba(0, 240, 255, 0.25);
+}
+
+.desktop-window-body::-webkit-scrollbar-thumb:hover,
+.intel-history-wrap::-webkit-scrollbar-thumb:hover,
+.chat-list::-webkit-scrollbar-thumb:hover,
+.guess-picker-menu::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 16, 240, 0.55);
+  box-shadow: 0 0 8px rgba(255, 16, 240, 0.4);
+}
+
+.desktop-window-body::-webkit-scrollbar-corner,
+.intel-history-wrap::-webkit-scrollbar-corner,
+.chat-list::-webkit-scrollbar-corner,
+.guess-picker-menu::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.intel-history-wrap,
+.chat-list,
+.guess-picker-menu {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 240, 255, 0.38) rgba(5, 8, 20, 0.5);
 }
 
 .desktop-window-resizer {
@@ -856,8 +908,11 @@ button:disabled {
 
 .chat-panel {
   min-height: 340px;
-  position: relative;
   overflow: hidden;
+}
+
+.chat-panel:not(.desktop-window-floating) {
+  position: relative;
 }
 
 .chat-panel.desktop-window-collapsed,

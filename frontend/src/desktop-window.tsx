@@ -7,9 +7,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from "react";
-import type { DesktopWindowId, DesktopWindowLayout } from "./window-layout";
+import { COLLAPSED_WINDOW_HEIGHT, type DesktopWindowId, type DesktopWindowLayout } from "./window-layout";
 
-const COLLAPSED_WINDOW_HEIGHT = 64;
 const COLLAPSE_TRANSITION_MS = 220;
 
 type DesktopWindowProps = {

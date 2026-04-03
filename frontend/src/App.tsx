@@ -1812,9 +1812,12 @@ export function App() {
 
   const handleDesktopWindowLayoutChange = useCallback((windowId: DesktopWindowId, nextLayout: DesktopWindowLayout) => {
     setDesktopWindows((currentWindows) => (
-      updateDesktopWindowLayout(currentWindows, windowId, nextLayout, viewportSize.width, viewportSize.height)
+      updateDesktopWindowLayout(
+        currentWindows, windowId, nextLayout, viewportSize.width, viewportSize.height,
+        windowId !== "mission" ? collapsedWindows[windowId] : false
+      )
     ));
-  }, [viewportSize.height, viewportSize.width]);
+  }, [viewportSize.height, viewportSize.width, collapsedWindows]);
 
   const toggleDesktopWindowCollapsed = useCallback((windowId: DesktopWindowId) => {
     if (windowId === "mission") {

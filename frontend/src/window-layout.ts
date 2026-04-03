@@ -3,6 +3,7 @@ export const DESKTOP_WINDOW_STORAGE_KEY = "false-flag.desktop-layout.v2";
 
 const WINDOW_MARGIN = 24;
 const WINDOW_TOP_SAFE_AREA = 228;
+export const COLLAPSED_WINDOW_HEIGHT = 64;
 
 export type DesktopWindowId = "mission" | "intel" | "chat";
 
@@ -25,21 +26,23 @@ function clampValue(value: number, minimum: number, maximum: number): number {
 function normalizeDesktopWindowLayout(
   layout: DesktopWindowLayout,
   viewportWidth: number,
-  viewportHeight: number
+  viewportHeight: number,
+  visualHeight?: number
 ): DesktopWindowLayout {
   const maxWidth = Math.max(layout.minWidth, viewportWidth - WINDOW_MARGIN * 2);
   const maxHeight = Math.max(layout.minHeight, viewportHeight - WINDOW_TOP_SAFE_AREA - WINDOW_MARGIN);
   const width = clampValue(layout.width, layout.minWidth, maxWidth);
   const height = clampValue(layout.height, layout.minHeight, maxHeight);
+  const effectiveHeight = visualHeight ?? height;
   const maxX = Math.max(WINDOW_MARGIN, viewportWidth - width - WINDOW_MARGIN);
-  const maxY = Math.max(WINDOW_TOP_SAFE_AREA, viewportHeight - height - WINDOW_MARGIN);
+  const maxY = Math.max(WINDOW_MARGIN, viewportHeight - effectiveHeight - WINDOW_MARGIN);
 
   return {
     ...layout,
     width,
     height,
     x: clampValue(layout.x, WINDOW_MARGIN, maxX),
-    y: clampValue(layout.y, WINDOW_TOP_SAFE_AREA, maxY)
+    y: clampValue(layout.y, WINDOW_MARGIN, maxY)
   };
 }
 
@@ -143,10 +146,14 @@ export function updateDesktopWindowLayout(
   windowId: DesktopWindowId,
   nextLayout: DesktopWindowLayout,
   viewportWidth: number,
-  viewportHeight: number
+  viewportHeight: number,
+  isCollapsed?: boolean
 ): DesktopWindowsState {
   return {
     ...windows,
-    [windowId]: normalizeDesktopWindowLayout(nextLayout, viewportWidth, viewportHeight)
+    [windowId]: normalizeDesktopWindowLayout(
+      nextLayout, viewportWidth, viewportHeight,
+      isCollapsed ? COLLAPSED_WINDOW_HEIGHT : undefined
+    )
   };
 }
