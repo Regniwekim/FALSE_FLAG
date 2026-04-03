@@ -54,6 +54,9 @@ test("round-over and new-game reset flow works across two clients", async ({ bro
   }
 
   await expect(page.getByText(/Match winner:/i)).toBeVisible();
+  await expect(page.getByTestId("mission-window")).toBeVisible();
+  await expect(page.getByTestId("intel-window")).toBeVisible();
+  await expect(page.getByTestId("chat-window")).toBeVisible();
   await expect(page.getByRole("button", { name: "Rematch" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Rematch" }).click();

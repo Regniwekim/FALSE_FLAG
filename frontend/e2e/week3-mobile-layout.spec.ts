@@ -54,7 +54,7 @@ test("week 3 mobile portrait layout stays usable in active match", async ({ brow
   const makeGuessButton = mobilePage.getByRole("button", { name: "Make Guess" });
   await makeGuessButton.scrollIntoViewIfNeeded();
   await expect(makeGuessButton).toBeVisible();
-  await expect(mobilePage.getByTestId("mission-window")).toBeVisible();
+  await expect(mobilePage.getByTestId("mission-window")).toHaveCount(0);
   await expect(mobilePage.getByTestId("intel-window")).toBeVisible();
   await expect(mobilePage.getByTestId("chat-window")).toBeVisible();
 

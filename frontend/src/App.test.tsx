@@ -82,6 +82,32 @@ describe("App turn/state control gating", () => {
     cleanup();
   });
 
+  it("shows the lobby window before game start, hides it during the match, and restores it after match over", async () => {
+    render(<App />);
+
+    expect(screen.getByTestId("mission-window")).toBeInTheDocument();
+    expect(screen.queryByTestId("intel-window")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("chat-window")).not.toBeInTheDocument();
+
+    startAsPlayerOne();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("mission-window")).not.toBeInTheDocument();
+      expect(screen.getByTestId("intel-window")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-window")).toBeInTheDocument();
+      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).not.toBeDisabled();
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.MATCH_OVER, { winnerPlayerId: "p1" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("mission-window")).toBeInTheDocument();
+      expect(screen.getByTestId("intel-window")).toBeInTheDocument();
+      expect(screen.getByTestId("chat-window")).toBeInTheDocument();
+      expect(screen.getByText(/Round controls are locked/i)).toBeInTheDocument();
+    });
+  });
+
   it("enables ask only for active player in awaiting-question", async () => {
     render(<App />);
 
@@ -99,7 +125,7 @@ describe("App turn/state control gating", () => {
     render(<App />);
     startAsPlayerOne();
 
-    const input = screen.getByPlaceholderText("Ask a yes-or-no question");
+    const input = await screen.findByPlaceholderText("Ask a yes-or-no question");
     fireEvent.change(input, { target: { value: "Is it in Europe?" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
 

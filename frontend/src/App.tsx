@@ -1363,7 +1363,11 @@ export function App() {
   const nextRoundCountdownLabel = nextRoundCountdownMs !== null
     ? `${Math.max(0.1, nextRoundCountdownMs / 1000).toFixed(1)}s`
     : null;
+  const currentRoundResultLabel = roundResult ? formatRoundReason(roundResult.reason) : "pending";
   const areSecretsVisible = roundRevealPhase === "secrets" || roundRevealPhase === "settled";
+  const hasGameStarted = Boolean(gameInfo);
+  const shouldShowMissionWindow = !hasGameStarted || Boolean(matchWinnerId);
+  const shouldShowOpsWindows = hasGameStarted;
   const isDesktopWindowing = viewportSize.width >= DESKTOP_WINDOW_BREAKPOINT;
   const heroPanelClassName = connected
     ? /Reconnecting|Unable/.test(status)
@@ -1417,9 +1421,6 @@ export function App() {
             <option key={difficulty} value={difficulty}>{formatDifficultyLabel(difficulty)}</option>
           ))}
         </select>
-        <p className="difficulty-hint">
-          Easy starts with 24 countries, Medium with 36, Hard with 48, and 007 uses the full global list.
-        </p>
         <button onClick={createRoom}>Create Room</button>
       </div>
 
@@ -1441,38 +1442,6 @@ export function App() {
         </button>
       </div>
       {inviteStatus ? <p className="invite-status">{inviteStatus}</p> : null}
-
-      <div className="controls controls-stack">
-        <input
-          value={questionInput}
-          onChange={(event) => setQuestionInput(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.nativeEvent.isComposing) {
-              event.preventDefault();
-              askQuestion();
-            }
-          }}
-          placeholder="Ask a yes-or-no question"
-          disabled={!canAsk}
-        />
-        <button onClick={askQuestion} disabled={!canAsk || !questionInput.trim()}>
-          Ask
-        </button>
-      </div>
-
-      <div className="status-list">
-        <p>Current phase: {formatTurnState(turnState)}</p>
-        <p>Eliminated flags: {eliminatedCodes.length}</p>
-        <p>Round result: {roundResult ? formatRoundReason(roundResult.reason) : "pending"}</p>
-      </div>
-
-      {pendingQuestionText || pendingGuessCode || recentlyConfirmedFlagCode ? (
-        <div className="feedback-chip-row" aria-live="polite">
-          {pendingQuestionText ? <p className="feedback-chip feedback-chip-info">Question in flight</p> : null}
-          {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
-          {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
-        </div>
-      ) : null}
     </div>
   );
 
@@ -1513,14 +1482,74 @@ export function App() {
             </div>
           </div>
 
-          {lastAnswered ? (
-            <p className="event-strip">
-              <span>Last Q and A: {lastAnswered.question}</span>
-              <span className={lastAnswered.answer === "yes" ? "answer-badge answer-badge-yes" : "answer-badge answer-badge-no"}>
-                {lastAnswered.answer.toUpperCase()}
-              </span>
-            </p>
-          ) : null}
+          <div className="intel-ops-grid">
+            <section className="intel-command-panel">
+              <p className="intel-section-label">{matchWinnerId ? "Match Console" : "Question Console"}</p>
+
+              {lastAnswered ? (
+                <p className="event-strip">
+                  <span>Last Q and A: {lastAnswered.question}</span>
+                  <span className={lastAnswered.answer === "yes" ? "answer-badge answer-badge-yes" : "answer-badge answer-badge-no"}>
+                    {lastAnswered.answer.toUpperCase()}
+                  </span>
+                </p>
+              ) : (
+                <p className="intel-empty-line">No confirmed Q and A yet.</p>
+              )}
+
+              {matchWinnerId ? (
+                <p className="intel-empty-line">Round controls are locked. Use rematch or start a fresh room below.</p>
+              ) : (
+                <>
+                  <div className="controls controls-stack intel-question-row">
+                    <input
+                      value={questionInput}
+                      onChange={(event) => setQuestionInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                          event.preventDefault();
+                          askQuestion();
+                        }
+                      }}
+                      placeholder="Ask a yes-or-no question"
+                      disabled={!canAsk}
+                    />
+                    <button onClick={askQuestion} disabled={!canAsk || !questionInput.trim()}>
+                      Ask
+                    </button>
+                  </div>
+
+                  {pendingQuestionText || pendingGuessCode || recentlyConfirmedFlagCode ? (
+                    <div className="feedback-chip-row" aria-live="polite">
+                      {pendingQuestionText ? <p className="feedback-chip feedback-chip-info">Question in flight</p> : null}
+                      {pendingGuessCode ? <p className="feedback-chip feedback-chip-warning">Guess locked: {pendingGuessCode.toUpperCase()}</p> : null}
+                      {recentlyConfirmedFlagCode ? <p className="feedback-chip feedback-chip-success">Confirmed eliminated: {recentlyConfirmedFlagCode.toUpperCase()}</p> : null}
+                    </div>
+                  ) : null}
+
+                  <div className="controls controls-stack action-row intel-action-row">
+                    <button onClick={endTurn} disabled={!canEndTurn}>End Turn</button>
+                    <button onClick={openGuessModal} disabled={!canGuess}>Make Guess</button>
+                  </div>
+                </>
+              )}
+            </section>
+
+            <div className="intel-status-grid">
+              <article className="detail-card intel-status-card">
+                <span className="slot-label">Current Phase</span>
+                <strong>{formatTurnState(turnState)}</strong>
+              </article>
+              <article className="detail-card intel-status-card">
+                <span className="slot-label">Eliminated</span>
+                <strong>{eliminatedCodes.length}</strong>
+              </article>
+              <article className="detail-card intel-status-card">
+                <span className="slot-label">Round Result</span>
+                <strong>{currentRoundResultLabel}</strong>
+              </article>
+            </div>
+          </div>
 
           {roundResult ? (
             <div className={resultCardClassName}>
@@ -1550,11 +1579,6 @@ export function App() {
               </div>
             </div>
           ) : null}
-
-          <div className="controls controls-stack action-row">
-            <button onClick={endTurn} disabled={!canEndTurn}>End Turn</button>
-            <button onClick={openGuessModal} disabled={!canGuess}>Make Guess</button>
-          </div>
         </>
       )}
     </div>
@@ -1728,47 +1752,53 @@ export function App() {
         </section>
 
         <div className={isDesktopWindowing ? "desktop-window-stage" : "desktop-window-stage desktop-window-stage-stacked"}>
-          <DesktopWindow
-            windowId="mission"
-            title="Mission Console"
-            subtitle="room control, question dispatch, and uplink routing"
-            layout={desktopWindows.mission}
-            interactive={isDesktopWindowing}
-            className="mission-window"
-            dataTestId="mission-window"
-            onFocus={focusDesktopWindow}
-            onLayoutChange={handleDesktopWindowLayoutChange}
-          >
-            {missionConsoleContent}
-          </DesktopWindow>
+          {shouldShowMissionWindow ? (
+            <DesktopWindow
+              windowId="mission"
+              title="Mission Console"
+              subtitle={matchWinnerId ? "room setup, invite routing, and post-match reset" : "room setup, difficulty selection, and uplink routing"}
+              layout={desktopWindows.mission}
+              interactive={isDesktopWindowing}
+              className="mission-window"
+              dataTestId="mission-window"
+              onFocus={focusDesktopWindow}
+              onLayoutChange={handleDesktopWindowLayoutChange}
+            >
+              {missionConsoleContent}
+            </DesktopWindow>
+          ) : null}
 
-          <DesktopWindow
-            windowId="intel"
-            title="Intel Desk"
-            subtitle="round telemetry, reveal sequence, and strike controls"
-            layout={desktopWindows.intel}
-            interactive={isDesktopWindowing}
-            className="round-panel intel-window"
-            dataTestId="intel-window"
-            onFocus={focusDesktopWindow}
-            onLayoutChange={handleDesktopWindowLayoutChange}
-          >
-            {intelDeskContent}
-          </DesktopWindow>
+          {shouldShowOpsWindows ? (
+            <DesktopWindow
+              windowId="intel"
+              title="Intel Desk"
+              subtitle="round telemetry, questioning, reveal sequence, and strike controls"
+              layout={desktopWindows.intel}
+              interactive={isDesktopWindowing}
+              className="round-panel intel-window"
+              dataTestId="intel-window"
+              onFocus={focusDesktopWindow}
+              onLayoutChange={handleDesktopWindowLayoutChange}
+            >
+              {intelDeskContent}
+            </DesktopWindow>
+          ) : null}
 
-          <DesktopWindow
-            windowId="chat"
-            title="Intercept Channel"
-            subtitle="questions, answers, and field chatter"
-            layout={desktopWindows.chat}
-            interactive={isDesktopWindowing}
-            className="chat-panel chat-window"
-            dataTestId="chat-window"
-            onFocus={focusDesktopWindow}
-            onLayoutChange={handleDesktopWindowLayoutChange}
-          >
-            {chatWindowContent}
-          </DesktopWindow>
+          {shouldShowOpsWindows ? (
+            <DesktopWindow
+              windowId="chat"
+              title="Intercept Channel"
+              subtitle="questions, answers, and field chatter"
+              layout={desktopWindows.chat}
+              interactive={isDesktopWindowing}
+              className="chat-panel chat-window"
+              dataTestId="chat-window"
+              onFocus={focusDesktopWindow}
+              onLayoutChange={handleDesktopWindowLayoutChange}
+            >
+              {chatWindowContent}
+            </DesktopWindow>
+          ) : null}
         </div>
       </div>
 

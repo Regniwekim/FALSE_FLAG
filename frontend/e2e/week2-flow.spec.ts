@@ -17,7 +17,7 @@ async function expectRoundNumber(page: Page, roundNumber: number): Promise<void>
   await expect(page.getByTestId("round-status")).toContainText(new RegExp(`Round\\s+${roundNumber}\\b`, "i"));
 }
 
-async function clickFirstUncoveredMarker(page: Page): Promise<string> {
+async function findFirstUncoveredMarkerLabel(page: Page): Promise<string | null> {
   const markers = page.getByTestId("map-canvas").locator(".map-flag-card");
   const count = await markers.count();
 
@@ -42,12 +42,58 @@ async function clickFirstUncoveredMarker(page: Page): Promise<string> {
       continue;
     }
 
-    await expect(marker).toBeEnabled();
-    await marker.click();
     return label;
   }
 
-  throw new Error("Expected at least one uncovered map marker button");
+  return null;
+}
+
+async function overlapWindow(page: Page, sourceTestId: string, targetTestId: string): Promise<void> {
+  const sourceTitleBar = page.getByTestId(sourceTestId).locator(".desktop-window-titlebar");
+  const targetWindow = page.getByTestId(targetTestId);
+  const sourceBox = await sourceTitleBar.boundingBox();
+  const targetBox = await targetWindow.boundingBox();
+
+  if (!sourceBox || !targetBox) {
+    return;
+  }
+
+  await page.mouse.move(sourceBox.x + 56, sourceBox.y + 18);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + 112, targetBox.y + 96, { steps: 12 });
+  await page.mouse.up();
+}
+
+async function clickFirstUncoveredMarker(page: Page): Promise<string> {
+  let label = await findFirstUncoveredMarkerLabel(page);
+  if (!label) {
+    await overlapWindow(page, "chat-window", "intel-window");
+    label = await findFirstUncoveredMarkerLabel(page);
+  }
+
+  if (!label) {
+    await overlapWindow(page, "intel-window", "chat-window");
+    label = await findFirstUncoveredMarkerLabel(page);
+  }
+
+  if (!label) {
+    const fallbackMarker = page.getByTestId("map-canvas").locator(".map-flag-card:not([disabled])").first();
+    await expect(fallbackMarker).toBeVisible();
+    label = await fallbackMarker.getAttribute("aria-label");
+
+    if (!label) {
+      throw new Error("Expected a keyboard-focusable map marker button");
+    }
+
+    await fallbackMarker.focus();
+    await page.keyboard.press("Enter");
+    return label;
+  }
+
+  const marker = page.getByRole("button", { name: label }).first();
+  await expect(marker).toBeEnabled();
+  await marker.click();
+  return label;
 }
 
 test("two-player Week 2 gameplay loop works across browser contexts", async ({ browser, page }) => {
