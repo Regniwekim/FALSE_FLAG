@@ -88,7 +88,7 @@ describe("App turn/state control gating", () => {
 
     const heroPanel = container.querySelector(".hero-panel") as HTMLElement | null;
     expect(heroPanel).not.toBeNull();
-    expect(within(heroPanel as HTMLElement).getByRole("heading", { name: /\.FALSE_FLAG\/\/Global Signal/i })).toBeInTheDocument();
+    expect(within(heroPanel as HTMLElement).getByRole("heading", { name: /\.false_flag\/\/GLOBAL SIGNAL/i })).toBeInTheDocument();
     expect(within(heroPanel as HTMLElement).getByRole("button", { name: "How to Play" })).toBeInTheDocument();
     expect(within(heroPanel as HTMLElement).getByRole("button", { name: "Credits" })).toBeInTheDocument();
     expect(within(heroPanel as HTMLElement).queryByText(/Week 3 Build In Progress/i)).not.toBeInTheDocument();

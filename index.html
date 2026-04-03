@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FALSE_FLAG - Multiplayer Guess Who with Flags</title>
+    <title>.false_flag//GLOBAL SIGNAL - Multiplayer Guess Who with Flags</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         
@@ -318,7 +318,7 @@
 <body>
     <header>
         <div class="player-label" style="background:#ff2d55;color:white;">PLAYER 1 (RED)</div>
-        <h1>FALSE_FLAG</h1>
+        <h1>.false_flag//GLOBAL SIGNAL</h1>
         <div class="player-label" style="background:#00d4ff;color:#111;">PLAYER 2 (BLUE)</div>
     </header>
     
@@ -393,7 +393,7 @@
     </main>
     
     <div class="footer">
-        FALSE_FLAG - Exact Guess Who rules adapted for flags - Hotseat 2-player demo (same device) - 
+        .false_flag//GLOBAL SIGNAL - Exact Guess Who rules adapted for flags - Hotseat 2-player demo (same device) - 
         <strong>Next step:</strong> Real-time online multiplayer with Socket.io (code included in comments)
     </div>
     
@@ -627,10 +627,10 @@
             updateTurnUI();
             
             // Welcome message
-            addChatMessage("Welcome to FALSE_FLAG", 'opponent');
+            addChatMessage("Welcome to .false_flag//GLOBAL SIGNAL", 'opponent');
             addChatMessage("Player 1 (RED) goes first - ask a yes/no question in the chat!", 'self');
             
-            console.log('%cFALSE_FLAG Multiplayer Hotseat Ready!', 'color:#00ff9d;font-size:18px');
+            console.log('%c.false_flag//GLOBAL SIGNAL Multiplayer Hotseat Ready!', 'color:#00ff9d;font-size:18px');
             console.log('P1 secret:', gameState.p1Secret.name);
             console.log('P2 secret:', gameState.p2Secret.name);
             console.log('Follow exact Guess Who rules: ask in chat -> opponent answers YES/NO -> eliminate on YOUR board only -> guess on your turn');
@@ -659,7 +659,7 @@
         
         io.on('connection', (socket) => {
             // ... full real-time matchmaking + private per-player boards
-            console.log('Player connected - ready for real online FALSE_FLAG');
+            console.log('Player connected - ready for real online .false_flag//GLOBAL SIGNAL');
         });
         
         server.listen(3000);

@@ -1,6 +1,6 @@
-# FALSE_FLAG
+# .false_flag//GLOBAL SIGNAL
 
-FALSE_FLAG is a real-time, server-authoritative 1v1 deduction game built as a TypeScript monorepo. Each player receives a secret country flag, asks yes-or-no questions in live chat, eliminates candidates on a private board, and tries to land the correct guess before the opponent. The project combines a React/Vite frontend, an Express/Socket.IO backend, and a shared package for event contracts and flag data.
+.false_flag//GLOBAL SIGNAL is a real-time, server-authoritative 1v1 deduction game built as a TypeScript monorepo. Each player receives a secret country flag, asks yes-or-no questions in live chat, eliminates candidates on a private board, and tries to land the correct guess before the opponent. The project combines a React/Vite frontend, an Express/Socket.IO backend, and a shared package for event contracts and flag data.
 
 ## What ships today
 

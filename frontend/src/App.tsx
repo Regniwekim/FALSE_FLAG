@@ -2219,7 +2219,7 @@ export function App() {
         <div className="hud-shell">
           <header className="panel panel-wide hero-panel">
             <div>
-              <h1>.FALSE_FLAG//Global Signal</h1>
+              <h1>.false_flag//GLOBAL SIGNAL</h1>
             </div>
             <div className="hero-actions">
               <button type="button" onClick={openRulesModal}>How to Play</button>
@@ -2446,7 +2446,7 @@ export function App() {
         >
           <div ref={creditsModalRef} className="guess-modal credits-modal" role="dialog" aria-modal="true" aria-labelledby="credits-modal-title">
             <h2 id="credits-modal-title">Credits</h2>
-            <p className="section-subtitle">Source acknowledgements for the typography, map, flag imagery, and country data used by FALSE_FLAG.</p>
+            <p className="section-subtitle">Source acknowledgements for the typography, map, flag imagery, and country data used by .false_flag//GLOBAL SIGNAL.</p>
             <div className="credits-modal-content">
               <section className="credits-resource">
                 <p className="credits-resource-label">SVG World Map</p>
