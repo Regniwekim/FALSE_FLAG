@@ -48,7 +48,7 @@ export class EventValidator {
       return fail(ERROR_CODES.INVALID_STATE, "Turn cannot be ended in the current state.");
     }
     if (room.round.activePlayerId !== actorPlayerId) {
-      return fail(ERROR_CODES.NOT_YOUR_TURN, "Only the active player can end turn.");
+      return fail(ERROR_CODES.NOT_YOUR_TURN, "Only the active player can end their turn.");
     }
     return { ok: true };
   }
@@ -103,7 +103,7 @@ export class EventValidator {
 
   validateNewGame(room: RoomState): ValidationResult {
     if (room.status !== "match-over") {
-      return fail(ERROR_CODES.INVALID_STATE, "New game is only allowed after match over.");
+      return fail(ERROR_CODES.INVALID_STATE, "New game is only allowed after the match is over.");
     }
     return { ok: true };
   }

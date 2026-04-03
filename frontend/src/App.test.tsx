@@ -86,7 +86,7 @@ describe("App turn/state control gating", () => {
     startAsPlayerOne();
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask a yes/no question")).not.toBeDisabled();
+      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).not.toBeDisabled();
     });
 
     expect(screen.queryByRole("button", { name: "Answer Yes" })).not.toBeInTheDocument();
@@ -97,7 +97,7 @@ describe("App turn/state control gating", () => {
     render(<App />);
     startAsPlayerOne();
 
-    const input = screen.getByPlaceholderText("Ask a yes/no question");
+    const input = screen.getByPlaceholderText("Ask a yes-or-no question");
     fireEvent.change(input, { target: { value: "Is it in Europe?" } });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
 
@@ -146,14 +146,14 @@ describe("App turn/state control gating", () => {
     startAsPlayerOne();
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask a yes/no question")).not.toBeDisabled();
+      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).not.toBeDisabled();
     });
 
     mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_ENDED, { nextActivePlayerId: "p2" });
     mocked.socket.emitLocal(SERVER_TO_CLIENT.TURN_STATE_CHANGED, { state: "awaiting-question" });
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText("Ask a yes/no question")).toBeDisabled();
+      expect(screen.getByPlaceholderText("Ask a yes-or-no question")).toBeDisabled();
     });
   });
 

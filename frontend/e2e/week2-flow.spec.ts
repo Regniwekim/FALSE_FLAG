@@ -33,8 +33,8 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await expect(page.getByText(/Round\s+1/i)).toBeVisible();
   await expect(page2.getByText(/Round\s+1/i)).toBeVisible();
 
-  await expect(page.getByPlaceholder("Ask a yes/no question")).toBeEnabled();
-  await page.getByPlaceholder("Ask a yes/no question").fill("Is it in Europe?");
+  await expect(page.getByPlaceholder("Ask a yes-or-no question")).toBeEnabled();
+  await page.getByPlaceholder("Ask a yes-or-no question").fill("Is it in Europe?");
   await page.getByRole("button", { name: "Ask" }).click();
 
   await expect(page2.getByText(/^Is it in Europe\?$/)).toBeVisible();
@@ -51,7 +51,7 @@ test("two-player Week 2 gameplay loop works across browser contexts", async ({ b
   await expect(page.getByRole("button", { name: "End Turn" })).toBeEnabled();
   await page.getByRole("button", { name: "End Turn" }).click();
 
-  await expect(page2.getByPlaceholder("Ask a yes/no question")).toBeEnabled();
+  await expect(page2.getByPlaceholder("Ask a yes-or-no question")).toBeEnabled();
 
   await page.getByPlaceholder("Chat message").fill("hello from p1");
   await page.getByRole("button", { name: "Send Chat" }).click();

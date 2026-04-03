@@ -1096,7 +1096,7 @@ export function App() {
         <div className="invite-strip" aria-live="polite">
           <input value={inviteLink || "Create a room to generate invite link"} readOnly />
           <button onClick={copyInviteLink} disabled={!inviteLink}>
-            Copy Invite
+            Copy Invite Link
           </button>
         </div>
         {inviteStatus ? <p className="invite-status">{inviteStatus}</p> : null}
@@ -1111,7 +1111,7 @@ export function App() {
                 askQuestion();
               }
             }}
-            placeholder="Ask a yes/no question"
+            placeholder="Ask a yes-or-no question"
             disabled={!canAsk}
           />
           <button onClick={askQuestion} disabled={!canAsk || !questionInput.trim()}>
@@ -1120,7 +1120,7 @@ export function App() {
         </div>
 
         <div className="status-list">
-          <p>Turn state: {formatTurnState(turnState)}</p>
+          <p>Current phase: {formatTurnState(turnState)}</p>
           <p>Eliminated flags: {eliminatedCodes.length}</p>
           <p>Round result: {roundResult ? formatRoundReason(roundResult.reason) : "pending"}</p>
         </div>
@@ -1163,7 +1163,7 @@ export function App() {
               </div>
             </div>
 
-            {lastAnswered ? <p className="event-strip">Last Q/A: {lastAnswered}</p> : null}
+            {lastAnswered ? <p className="event-strip">Last Q and A: {lastAnswered}</p> : null}
 
             {roundResult ? (
               <div className="result-card">
@@ -1295,7 +1295,7 @@ export function App() {
         </div>
         <div className="map-legend">
           <span><i className="legend-dot legend-dot-live" /> Active candidate</span>
-          <span><i className="legend-dot legend-dot-dead" /> Eliminated lead</span>
+          <span><i className="legend-dot legend-dot-dead" /> Eliminated candidate</span>
         </div>
       </section>
 
@@ -1385,7 +1385,7 @@ export function App() {
 
               <h3>Round Flow</h3>
               <ol>
-                <li>On your turn, ask one yes/no question about your opponent&apos;s secret country.</li>
+                <li>On your turn, ask one yes-or-no question about your opponent&apos;s secret country.</li>
                 <li>Your opponent answers yes or no.</li>
                 <li>Use the answer to eliminate flags on your board.</li>
                 <li>End your turn, or make a guess if you are confident.</li>

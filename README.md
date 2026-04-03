@@ -2,7 +2,12 @@
 
 Server-authoritative, real-time 1v1 deduction game inspired by Guess Who, built as a TypeScript monorepo.
 
-Players create or join a room, ask yes/no questions, eliminate candidates on their own board, and make guesses. Matches run as a best-of-5 championship with automatic next-round transitions.
+Players create or join a room, ask yes-or-no questions, eliminate candidates on their own board, and make guesses. Matches run as a best-of-5 championship with automatic next-round transitions.
+
+## Terminology
+- Room: The pre-game session players create or join.
+- Match: A best-of-5 series.
+- Round: A single game within a match.
 
 ## Current Status
 - Week 3 complete and sign-off ready.
