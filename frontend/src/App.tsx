@@ -97,31 +97,7 @@ const CHAMPIONSHIP_TARGET_WINS = 3;
 const MAP_FLAG_PREVIEW_DELAY_MS = 500;
 const MAP_FLAG_PREVIEW_TOUCH_MOVE_TOLERANCE_PX = 12;
 
-function buildCenteredGridPositions(center: number, step: number, limit: number): number[] {
-  const positions = [Number(center.toFixed(1))];
-
-  for (let offset = step; center - offset > 0 || center + offset < limit; offset += step) {
-    const negative = Number((center - offset).toFixed(1));
-    const positive = Number((center + offset).toFixed(1));
-
-    if (negative > 0) {
-      positions.push(negative);
-    }
-
-    if (positive < limit) {
-      positions.push(positive);
-    }
-  }
-
-  return positions;
-}
-
-function formatMapGridCoordinate(coordinate: number): string {
-  return coordinate.toFixed(1).replace(/\.0$/, "");
-}
-
-const MAP_GRID_VERTICAL_POSITIONS = buildCenteredGridPositions(PRIME_MERIDIAN_X, MAP_GRID_VERTICAL_STEP, MAP_WIDTH);
-const MAP_GRID_HORIZONTAL_POSITIONS = buildCenteredGridPositions(EQUATOR_Y, MAP_GRID_HORIZONTAL_STEP, MAP_HEIGHT);
+const MAP_PAN_EDGE_MARGIN = 100;
 const EXPANDED_HIDDEN_COUNTRY_INTEL_WIDTH = 820;
 const EXPANDED_HIDDEN_COUNTRY_INTEL_HEIGHT = 720;
 
@@ -155,6 +131,27 @@ function getDefaultMapPan(viewportWidth: number, viewportHeight: number): { x: n
     x: Math.round((viewportWidth - MAP_WIDTH) / 2),
     y: getCenteredPanY(viewportHeight, 1)
   };
+}
+
+function getCenteredPanX(viewportWidth: number, zoomLevel: number): number {
+  const mapWidth = MAP_WIDTH * zoomLevel;
+  if (mapWidth >= viewportWidth) {
+    return 0;
+  }
+
+  return Math.round((viewportWidth - mapWidth) / 2);
+}
+
+function clampMapPanX(candidateX: number, zoomLevel: number, viewportWidth: number): number {
+  const mapWidth = MAP_WIDTH * zoomLevel;
+
+  if (mapWidth <= viewportWidth) {
+    return getCenteredPanX(viewportWidth, zoomLevel);
+  }
+
+  const maxX = MAP_PAN_EDGE_MARGIN;
+  const minX = viewportWidth - mapWidth - MAP_PAN_EDGE_MARGIN;
+  return Math.max(minX, Math.min(maxX, candidateX));
 }
 
 function clampMapPanY(candidateY: number, zoomLevel: number, viewportHeight: number): number {
@@ -398,14 +395,6 @@ function WorldMapBackdrop() {
   return (
     <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} className="world-map-svg" aria-hidden="true" focusable="false">
       <image className="map-source-image" href="/world.svg" x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} />
-      <g className="map-grid">
-        {MAP_GRID_VERTICAL_POSITIONS.map((coordinate) => (
-          <path key={`grid-v-${coordinate}`} d={`M${formatMapGridCoordinate(coordinate)} 0v${MAP_HEIGHT}`} />
-        ))}
-        {MAP_GRID_HORIZONTAL_POSITIONS.map((coordinate) => (
-          <path key={`grid-h-${coordinate}`} d={`M0 ${formatMapGridCoordinate(coordinate)}h${MAP_WIDTH}`} />
-        ))}
-      </g>
     </svg>
   );
 }
@@ -1415,6 +1404,11 @@ export function App() {
     setFlagElimination(flagCode);
   }, [endMapFlagPreview, setFlagElimination]);
 
+  const clampPanX = (candidateX: number, zoomLevel: number): number => {
+    const viewportWidth = mapViewportRef.current?.clientWidth ?? viewportSize.width;
+    return clampMapPanX(candidateX, zoomLevel, viewportWidth);
+  };
+
   const clampPanY = (candidateY: number, zoomLevel: number): number => {
     const viewportHeight = mapViewportRef.current?.clientHeight ?? viewportSize.height;
     return clampMapPanY(candidateY, zoomLevel, viewportHeight);
@@ -1434,7 +1428,7 @@ export function App() {
 
       const nextDefaultPan = getDefaultMapPan(nextViewportSize.width, nextViewportSize.height);
       const nextPan = {
-        x: zoomRef.current === 1 ? nextDefaultPan.x : panRef.current.x,
+        x: zoomRef.current === 1 ? nextDefaultPan.x : clampMapPanX(panRef.current.x, zoomRef.current, nextViewportSize.width),
         y: clampMapPanY(panRef.current.y, zoomRef.current, nextViewportSize.height)
       };
 
@@ -1476,7 +1470,7 @@ export function App() {
       const nextZoom = Math.max(1, Math.min(4, currentViewportState.zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
       const scaleRatio = nextZoom / currentViewportState.zoom;
 
-      const nextPanX = offsetX - (offsetX - currentViewportState.pan.x) * scaleRatio;
+      const nextPanX = clampPanX(offsetX - (offsetX - currentViewportState.pan.x) * scaleRatio, nextZoom);
       const nextPanY = clampPanY(offsetY - (offsetY - currentViewportState.pan.y) * scaleRatio, nextZoom);
 
       scheduleViewportState(nextZoom, { x: nextPanX, y: nextPanY });
@@ -1502,7 +1496,7 @@ export function App() {
       return;
     }
     scheduleViewportState(zoomRef.current, {
-      x: event.clientX - panStartRef.current.x,
+      x: clampPanX(event.clientX - panStartRef.current.x, zoomRef.current),
       y: clampPanY(event.clientY - panStartRef.current.y, zoomRef.current)
     });
   };
@@ -1541,7 +1535,7 @@ export function App() {
       const currentViewportState = pendingViewportStateRef.current ?? { zoom: zoomRef.current, pan: panRef.current };
       const nextZoom = Math.max(1, Math.min(4, currentViewportState.zoom * (nextDistance / pinchDistanceRef.current)));
       scheduleViewportState(nextZoom, {
-        ...currentViewportState.pan,
+        x: clampPanX(currentViewportState.pan.x, nextZoom),
         y: clampPanY(currentViewportState.pan.y, nextZoom)
       });
       pinchDistanceRef.current = nextDistance;
@@ -1550,7 +1544,7 @@ export function App() {
 
     if (event.touches.length === 1 && isPanningRef.current) {
       scheduleViewportState(zoomRef.current, {
-        x: event.touches[0].clientX - panStartRef.current.x,
+        x: clampPanX(event.touches[0].clientX - panStartRef.current.x, zoomRef.current),
         y: clampPanY(event.touches[0].clientY - panStartRef.current.y, zoomRef.current)
       });
     }
@@ -1566,21 +1560,20 @@ export function App() {
 
   const zoomIn = () => {
     const nextZoom = Math.min(4, zoomRef.current + 0.2);
-    applyViewportState(nextZoom, { ...panRef.current, y: clampPanY(panRef.current.y, nextZoom) });
+    applyViewportState(nextZoom, { x: clampPanX(panRef.current.x, nextZoom), y: clampPanY(panRef.current.y, nextZoom) });
   };
 
   const zoomOut = () => {
     const nextZoom = Math.max(1, zoomRef.current - 0.2);
-    applyViewportState(nextZoom, { ...panRef.current, y: clampPanY(panRef.current.y, nextZoom) });
+    applyViewportState(nextZoom, { x: clampPanX(panRef.current.x, nextZoom), y: clampPanY(panRef.current.y, nextZoom) });
   };
 
   const resetMapView = () => {
     applyViewportState(1, getDefaultMapPan(viewportSize.width, viewportSize.height));
   };
 
-  const tileSpan = MAP_WIDTH * zoom;
-  const wrappedPanX = pan.x - Math.round(pan.x / tileSpan) * tileSpan;
-  const tileOffsets = (import.meta.env.MODE === "test" ? [0] : [-1, 0, 1]).map((offset) => offset * MAP_WIDTH);
+  const gridOffsetX = pan.x;
+  const gridOffsetY = pan.y + (EQUATOR_Y % MAP_GRID_HORIZONTAL_STEP) * zoom;
 
   const remainingFlags = activeFlagCodes.filter((flagCode) => !eliminatedCodes.includes(flagCode));
   const intelGatheredRatio = activeFlagCodes.length > 0
@@ -2170,6 +2163,12 @@ export function App() {
         className={mapCanvasClassName}
         data-testid="map-canvas"
         aria-label={`${activeFlagCodes.length} flag cards`}
+        style={{
+          "--grid-cell-w": `${MAP_GRID_VERTICAL_STEP * zoom}px`,
+          "--grid-cell-h": `${MAP_GRID_HORIZONTAL_STEP * zoom}px`,
+          "--grid-offset-x": `${gridOffsetX}px`,
+          "--grid-offset-y": `${gridOffsetY}px`
+        } as CSSProperties}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -2181,15 +2180,13 @@ export function App() {
         <div
           className="map-world-layer"
           style={{
-            transform: `translate(${wrappedPanX}px, ${pan.y}px) scale(${zoom})`,
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
             "--marker-scale": `${1 / zoom}`
           } as CSSProperties}
         >
-          {tileOffsets.map((tileOffset) => (
-            <div key={tileOffset} className="map-tile" style={{ left: `${tileOffset}px` }}>
-              <WorldMapBackdrop />
-            </div>
-          ))}
+          <div className="map-tile">
+            <WorldMapBackdrop />
+          </div>
           {activeFlagCodes.map((flagCode) => {
             const marker = getMarkerForFlag(flagCode, flagMarkerPositions);
             return (

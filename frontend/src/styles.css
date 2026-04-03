@@ -1318,6 +1318,19 @@ button:disabled {
   z-index: 0;
 }
 
+.map-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(0, 240, 255, 0.22) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 240, 255, 0.22) 1px, transparent 1px);
+  background-size: var(--grid-cell-w, 200px) var(--grid-cell-h, 171px);
+  background-position: var(--grid-offset-x, 0) var(--grid-offset-y, 0);
+  z-index: 1;
+}
+
 .map-stage::after {
   content: "";
   position: absolute;
@@ -1326,6 +1339,7 @@ button:disabled {
   background:
     radial-gradient(circle at center, transparent 45%, rgba(5, 8, 20, 0.62) 100%),
     linear-gradient(180deg, rgba(5, 8, 20, 0.12), rgba(5, 8, 20, 0.52));
+  z-index: 2;
 }
 
 .map-stage-canvas {
@@ -1379,12 +1393,6 @@ button:disabled {
   stroke: #00F0FF;
   stroke-width: 2;
   opacity: 0.9;
-}
-
-.map-grid path {
-  stroke: rgba(0, 240, 255, 0.22);
-  stroke-width: 1;
-  filter: none;
 }
 
 .flag-card {
