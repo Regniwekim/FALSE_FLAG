@@ -2,55 +2,58 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
-const MAP_CODES = [
-  "us",
-  "ca",
-  "mx",
-  "cu",
-  "br",
-  "ar",
-  "co",
-  "pe",
-  "gb",
-  "fr",
-  "de",
-  "it",
-  "za",
-  "ng",
-  "eg",
-  "ke",
-  "cn",
-  "in",
-  "jp",
-  "kr",
-  "au",
-  "nz",
-  "tr",
-  "sa"
-];
-
-const CLASS_FALLBACK = {
-  US: "United States",
-  CA: "Canada",
-  AR: "Argentina",
-  GB: "United Kingdom",
-  FR: "France",
-  IT: "Italy",
-  CN: "China",
-  JP: "Japan",
-  AU: "Australia",
-  NZ: "New Zealand",
-  TR: "Turkey"
+const CLASS_TO_CODE = {
+  Angola: "AO",
+  Argentina: "AR",
+  Australia: "AU",
+  Azerbaijan: "AZ",
+  Bahamas: "BS",
+  Canada: "CA",
+  "Canary Islands (Spain)": "ES",
+  Chile: "CL",
+  China: "CN",
+  Cyprus: "CY",
+  Denmark: "DK",
+  "Falkland Islands": "FK",
+  Fiji: "FJ",
+  France: "FR",
+  Greece: "GR",
+  Indonesia: "ID",
+  Italy: "IT",
+  Japan: "JP",
+  Malaysia: "MY",
+  "New Caledonia": "NC",
+  "New Zealand": "NZ",
+  Norway: "NO",
+  Oman: "OM",
+  "Papua New Guinea": "PG",
+  Philippines: "PH",
+  "Puerto Rico": "PR",
+  "Russian Federation": "RU",
+  "Solomon Islands": "SB",
+  "Trinidad and Tobago": "TT",
+  Turkey: "TR",
+  "United Kingdom": "GB",
+  "United States": "US",
+  Vanuatu: "VU"
 };
 
-const svgPath = path.resolve("frontend/public/world.svg");
-const svgText = await fs.readFile(svgPath, "utf8");
+const ID_TO_CODE = {
+  BQBO: "BQ"
+};
+
+const FLAGS_FILE = path.resolve("shared/src/flags.ts");
+const MARKERS_FILE = path.resolve("frontend/src/world-map-marker-positions.ts");
+const SVG_FILE = path.resolve("frontend/public/world.svg");
+
+const shouldWrite = process.argv.includes("--write");
+const svgText = await fs.readFile(SVG_FILE, "utf8");
 
 const browser = await chromium.launch({ headless: true });
 const page = await browser.newPage();
 
-const centroids = await page.evaluate(
-  async ({ inputSvg, mapCodes, classFallback }) => {
+const output = await page.evaluate(
+  async ({ inputSvg, classToCode, idToCode }) => {
     const parseNumber = (value, fallback) => {
       const parsed = Number.parseFloat(value ?? "");
       return Number.isFinite(parsed) ? parsed : fallback;
@@ -130,7 +133,14 @@ const centroids = await page.evaluate(
       countrySvg.setAttribute("height", String(height));
       countrySvg.setAttribute("viewBox", `0 0 ${width} ${height}`);
 
+      const seen = new Set();
       for (const pathNode of paths) {
+        const key = pathNode.getAttribute("d") ?? "";
+        if (seen.has(key)) {
+          continue;
+        }
+        seen.add(key);
+
         const clone = pathNode.cloneNode(true);
         clone.removeAttribute("id");
         clone.removeAttribute("class");
@@ -142,38 +152,87 @@ const centroids = await page.evaluate(
       return countrySvg;
     };
 
-    const output = {};
+    const bucket = new Map();
 
-    for (const code of mapCodes) {
-      const upper = code.toUpperCase();
-      let paths = Array.from(sourceSvg.querySelectorAll(`path#${upper}`));
-
-      if (paths.length === 0 && classFallback[upper]) {
-        const className = classFallback[upper];
-        paths = Array.from(sourceSvg.querySelectorAll(`path[class=\"${className}\"]`));
+    const addPath = (code, element) => {
+      if (!bucket.has(code)) {
+        bucket.set(code, []);
       }
+      bucket.get(code).push(element);
+    };
 
-      if (paths.length === 0) {
-        output[code] = null;
+    for (const node of sourceSvg.querySelectorAll("path[id]")) {
+      const id = node.getAttribute("id") ?? "";
+      if (!/^[A-Z][A-Z0-9]{1,3}$/.test(id)) {
         continue;
       }
 
-      const countrySvg = buildCountrySvg(paths);
-      output[code] = await computeRasterCentroid(countrySvg);
+      const mapped = idToCode[id] ?? id;
+      if (!/^[A-Z]{2}$/.test(mapped)) {
+        continue;
+      }
+
+      addPath(mapped, node);
     }
 
-    return output;
+    for (const node of sourceSvg.querySelectorAll("path[class]")) {
+      const className = node.getAttribute("class") ?? "";
+      const mapped = classToCode[className];
+      if (!mapped) {
+        continue;
+      }
+      addPath(mapped, node);
+    }
+
+    const codes = Array.from(bucket.keys()).sort();
+    const markers = {};
+
+    for (const code of codes) {
+      const paths = bucket.get(code) ?? [];
+      const countrySvg = buildCountrySvg(paths);
+      const centroid = await computeRasterCentroid(countrySvg);
+      if (!centroid) {
+        continue;
+      }
+      markers[code] = centroid;
+    }
+
+    return { codes, markers };
   },
-  { inputSvg: svgText, mapCodes: MAP_CODES, classFallback: CLASS_FALLBACK }
+  { inputSvg: svgText, classToCode: CLASS_TO_CODE, idToCode: ID_TO_CODE }
 );
 
 await browser.close();
 
-for (const code of MAP_CODES) {
-  const point = centroids[code];
-  if (!point) {
-    console.log(`${code}: MISSING`);
-    continue;
-  }
-  console.log(`${code}: { x: ${point.x}, y: ${point.y} }`);
+const markerEntries = output.codes
+  .filter((code) => output.markers[code])
+  .map((code) => {
+    const marker = output.markers[code];
+    return `  ${code.toLowerCase()}: { x: ${marker.x}, y: ${marker.y} },`;
+  });
+
+const markerSource = `export type FlagMarkerPositions = Record<string, { x: number; y: number }>;
+
+export const WORLD_MAP_MARKER_POSITIONS: FlagMarkerPositions = {
+${markerEntries.join("\n")}
+};
+`;
+
+const catalogSource = output.codes.map((code) => `"${code.toLowerCase()}"`).join(", ");
+
+if (shouldWrite) {
+  await fs.writeFile(MARKERS_FILE, markerSource, "utf8");
+
+  const flagsText = await fs.readFile(FLAGS_FILE, "utf8");
+  const replaced = flagsText.replace(
+    /export const FULL_FLAG_CATALOG = \[[\s\S]*?\] as const;/,
+    `export const FULL_FLAG_CATALOG = [\n  ${catalogSource}\n] as const;`
+  );
+  await fs.writeFile(FLAGS_FILE, replaced, "utf8");
+
+  console.log(`Updated ${path.relative(process.cwd(), MARKERS_FILE)} and ${path.relative(process.cwd(), FLAGS_FILE)}.`);
+  console.log(`Country count: ${output.codes.length}`);
+} else {
+  console.log(`Country count: ${output.codes.length}`);
+  console.log(output.codes.map((code) => code.toLowerCase()).join(","));
 }

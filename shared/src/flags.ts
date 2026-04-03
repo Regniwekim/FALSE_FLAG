@@ -1,10 +1,5 @@
 export const FULL_FLAG_CATALOG = [
-  "us", "ca", "mx", "cu", "br", "ar", "co", "pe", "ve", "cl", "ec", "uy",
-  "gb", "ie", "fr", "de", "it", "es", "pt", "nl", "be", "ch", "se", "no",
-  "fi", "dk", "pl", "cz", "at", "gr", "tr", "ua", "ro", "hu", "rs", "bg",
-  "za", "ng", "eg", "ke", "ma", "dz", "gh", "et", "tz", "cm", "sn", "tn",
-  "cn", "in", "jp", "kr", "au", "nz", "id", "th", "vn", "my", "ph", "sg",
-  "pk", "bd", "sa", "ae", "il", "ir", "iq", "qa", "kw", "om", "jo", "lb"
+  "ae", "af", "al", "am", "ao", "ar", "at", "au", "aw", "az", "ba", "bb", "bd", "be", "bf", "bg", "bh", "bi", "bj", "bn", "bo", "bq", "br", "bs", "bt", "bw", "by", "bz", "ca", "cd", "cf", "cg", "ch", "ci", "cl", "cm", "cn", "co", "cr", "cu", "cw", "cy", "cz", "de", "dj", "dk", "dm", "do", "dz", "ec", "ee", "eg", "eh", "er", "es", "et", "fi", "fj", "fk", "fr", "ga", "gb", "gd", "ge", "gf", "gh", "gl", "gm", "gn", "gq", "gr", "gt", "gu", "gw", "gy", "hn", "hr", "ht", "hu", "id", "ie", "il", "in", "iq", "ir", "is", "it", "jm", "jo", "jp", "ke", "kg", "kh", "kp", "kr", "kw", "kz", "la", "lb", "lc", "lk", "lr", "ls", "lt", "lu", "lv", "ly", "ma", "md", "me", "mg", "mk", "ml", "mm", "mn", "mq", "mr", "mw", "mx", "my", "mz", "na", "nc", "ne", "ng", "ni", "nl", "no", "np", "nz", "om", "pa", "pe", "pg", "ph", "pk", "pl", "pr", "ps", "pt", "pw", "py", "qa", "re", "ro", "rs", "ru", "rw", "sa", "sb", "sd", "se", "si", "sk", "sl", "sn", "so", "sr", "ss", "sv", "sy", "sz", "td", "tg", "th", "tj", "tl", "tm", "tn", "tr", "tt", "tw", "tz", "ua", "ug", "us", "uy", "uz", "vc", "ve", "vn", "vu", "xk", "ye", "yt", "za", "zm", "zw"
 ] as const;
 
 export const ROOM_DIFFICULTIES = ["easy", "medium", "hard", "007"] as const;
