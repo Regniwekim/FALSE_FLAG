@@ -2220,7 +2220,7 @@ export function App() {
 
       <div className="app-chrome">
         <div className="hud-shell">
-          <header className="panel panel-wide hero-panel">
+          <header className={`panel hero-panel${hasGameStarted ? " hero-panel-compact" : " panel-wide"}`}>
             <div>
               <h1>.false_flag//GLOBAL SIGNAL</h1>
             </div>

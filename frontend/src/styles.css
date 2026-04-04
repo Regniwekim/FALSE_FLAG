@@ -555,6 +555,37 @@ button:disabled {
   position: relative;
   background: var(--surface-titlebar);
   background-size: 100% 100%;
+  transition: all 400ms ease;
+}
+
+.hero-panel-compact {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 50;
+  width: auto;
+  padding: 10px 16px;
+  gap: 12px;
+  overflow: visible;
+  background: none;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  pointer-events: auto;
+}
+
+.hero-panel-compact h1 {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.hero-panel-compact .hero-actions {
+  gap: 6px;
+}
+
+.hero-panel-compact .hero-actions button {
+  font-size: 0.65rem;
+  padding: 4px 8px;
 }
 
 .hero-actions {
