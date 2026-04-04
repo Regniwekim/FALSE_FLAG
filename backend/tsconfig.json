@@ -4,13 +4,15 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "outDir": "dist",
+    "rootDir": "..",
     "strict": true,
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
       "@flagwho/shared": ["../shared/src/index.ts"]
     },
-    "types": ["node"]
+    "types": ["node"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src"],
   "exclude": [
