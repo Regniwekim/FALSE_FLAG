@@ -30,6 +30,7 @@ function getAllowedOrigins() {
     .split(",")
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
+}
 
 function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]) {
   if (!origin) {
@@ -107,7 +108,6 @@ function isDuplicateEvent(socket: Socket, payload: { clientEventId?: string }, a
 
   if (idSet.has(eventId)) {
     totalDuplicateEvents += 1;
-    auditLog("duplicate_event", { socketId: socket.id, playerId: actorPlayerId, eventId });
     return true;
   }
 
@@ -195,7 +195,7 @@ function emitPrivateState(io: Server, gameEngine: GameEngine, room: RoomState) {
   }
 }
 
-export function createRealtimeApp() {
+function createRealtimeApp() {
   const app = express();
   const allowedOrigins = getAllowedOrigins();
 
@@ -329,6 +329,7 @@ export function createRealtimeApp() {
           }
         }
       }
+    });
 
     socket.on(CLIENT_TO_SERVER.RECONNECT_ROOM, (payload: ReconnectRoomPayload) => {
       if (shouldRateLimit(socket)) {
@@ -677,11 +678,14 @@ export function createRealtimeApp() {
     });
   });
 
+
   return { app, io, httpServer };
-export function startServer(
+}
+
+export const startServer = async (
   port = Number(process.env.PORT ?? 3001),
   host = process.env.HOST ?? "0.0.0.0"
-) {
+) => {
   const { httpServer, io } = createRealtimeApp();
   return new Promise<{ port: number; close: () => Promise<void> }>((resolve) => {
     httpServer.listen(port, host, () => {
@@ -699,7 +703,7 @@ export function startServer(
       });
     });
   });
-}
+};
 
 if (process.env.NODE_ENV !== "test") {
   void (async () => {
