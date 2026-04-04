@@ -29,6 +29,8 @@ type DesktopWindowProps = {
 
 type WindowInteraction = {
   mode: "move" | "resize";
+  pointerId: number;
+  target: Element;
   startX: number;
   startY: number;
   startLayout: DesktopWindowLayout;
@@ -66,7 +68,9 @@ export function DesktopWindow({
         return;
       }
 
+      const { pointerId, target } = interactionRef.current;
       interactionRef.current = null;
+      try { target.releasePointerCapture(pointerId); } catch { /* already released */ }
       document.body.style.userSelect = previousUserSelectRef.current;
       document.body.style.cursor = "";
     };
@@ -148,8 +152,11 @@ export function DesktopWindow({
     event.preventDefault();
     event.stopPropagation();
     onFocus(windowId);
+    (event.target as Element).setPointerCapture(event.pointerId);
     interactionRef.current = {
       mode,
+      pointerId: event.pointerId,
+      target: event.target as Element,
       startX: event.clientX,
       startY: event.clientY,
       startLayout: layout

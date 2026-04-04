@@ -165,6 +165,7 @@ body {
 
 .desktop-window-titlebar-draggable {
   cursor: grab;
+  touch-action: none;
 }
 
 .desktop-window-titlebar-draggable:active {
@@ -326,6 +327,7 @@ body {
   background: transparent;
   box-shadow: none;
   cursor: nwse-resize;
+  touch-action: none;
 }
 
 .desktop-window-resizer::before {
