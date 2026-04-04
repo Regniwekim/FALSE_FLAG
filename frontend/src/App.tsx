@@ -35,6 +35,8 @@ import { DesktopWindow } from "./desktop-window";
 import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-panel";
 import { IntelSubpanel } from "./intel-subpanel";
 import { GlitchEffects, MapFlyingDots } from "./glitch-effects";
+import { useRef as useGlitchRef, useEffect as useGlitchEffect } from "react";
+import WorldSVG from "../public/world.svg";
 import {
   DESKTOP_WINDOW_BREAKPOINT,
   DESKTOP_WINDOW_STORAGE_KEY,
@@ -395,15 +397,41 @@ const FlagMarker = memo(function FlagMarker({
     && previousProps.previewPlacement === nextProps.previewPlacement;
 });
 
-function WorldMapBackdrop() {
+
+function WorldMapBackdrop({ glitchCountryId }: { glitchCountryId?: string }) {
+  // Render SVG as an <img> since Vite imports SVGs as URLs
   return (
-    <svg viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`} className="world-map-svg" aria-hidden="true" focusable="false">
-      <image className="map-source-image" href="/world.svg" x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} />
-    </svg>
+    <img src={WorldSVG} className="world-map-svg" aria-hidden="true" draggable={false} />
   );
 }
 
 export function App() {
+  // Glitch flicker state
+  const [glitchCountryId, setGlitchCountryId] = useState<string | null>(null);
+  const glitchTimerRef = useRef<number | null>(null);
+
+  // List of all country IDs from the SVG (ISO codes)
+  const countryIds = useMemo(() => Object.keys(WORLD_MAP_MARKER_POSITIONS), []);
+
+  // Schedule random glitch flicker
+  useEffect(() => {
+    function scheduleNextGlitch() {
+      // Random interval between 30s and 180s
+      const nextMs = 30000 + Math.random() * 150000;
+      glitchTimerRef.current = window.setTimeout(() => {
+        // Pick a random country
+        const randomId = countryIds[Math.floor(Math.random() * countryIds.length)];
+        setGlitchCountryId(randomId);
+        // Clear after flicker duration
+        setTimeout(() => setGlitchCountryId(null), 350);
+        scheduleNextGlitch();
+      }, nextMs);
+    }
+    scheduleNextGlitch();
+    return () => {
+      if (glitchTimerRef.current) window.clearTimeout(glitchTimerRef.current);
+    };
+  }, [countryIds]);
   const initialViewportSize = getViewportSize();
   const initialMapPan = getDefaultMapPan(initialViewportSize.width, initialViewportSize.height);
   const [connected, setConnected] = useState(false);
@@ -485,13 +513,12 @@ export function App() {
   const viewportFrameRef = useRef<number | null>(null);
 
   const triggerHaptic = (pattern: number | number[]) => {
-    if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
-      return;
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(pattern);
     }
-
-    navigator.vibrate(pattern);
   };
 
+  // Toast notification helper
   const pushToast = (text: string, tone: ToastTone = "info") => {
     const id = toastIdRef.current + 1;
     toastIdRef.current = id;
@@ -2536,4 +2563,3 @@ export function App() {
     </main>
   );
 }
-

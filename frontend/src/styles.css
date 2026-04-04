@@ -7,6 +7,13 @@
   --color-cyan: #00F0FF;
   --color-magenta: #FF10F0;
   --color-pink: #FF006E;
+
+.country-glitch-flicker {
+  fill: var(--color-pink) !important;
+  opacity: 0.25 !important;
+  transition: opacity 0.15s;
+  pointer-events: none;
+}
   --color-violet: #9D4EDD;
   --color-ink: #050814;
   --color-panel-text: #e9f6ff;
@@ -1475,6 +1482,11 @@ button:disabled {
   width: 2000px;
   height: 857px;
   display: block;
+  user-drag: none;
+  user-select: none;
+  -webkit-user-drag: none;
+  -webkit-user-select: none;
+  pointer-events: none;
 }
 
 .map-source-image {
