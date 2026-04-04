@@ -620,26 +620,73 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // Restore lobby state from ?room= query param
     const roomFromQuery = new URLSearchParams(window.location.search).get("room");
-    if (!roomFromQuery) {
-      return;
+    if (roomFromQuery) {
+      const sanitized = roomFromQuery.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      if (sanitized) {
+        setLobby((state) => {
+          if (state.roomCodeInput) {
+            return state;
+          }
+          return {
+            ...state,
+            roomCodeInput: sanitized
+          };
+        });
+      }
     }
 
-    const sanitized = roomFromQuery.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (!sanitized) {
-      return;
-    }
-
-    setLobby((state) => {
-      if (state.roomCodeInput) {
-        return state;
+    // Restore session info from localStorage and attempt reconnect
+    const storedPlayerId = window.localStorage.getItem("ff_playerId");
+    const storedRoomCode = window.localStorage.getItem("ff_roomCode");
+    const storedDisplayName = window.localStorage.getItem("ff_displayName");
+    if (storedPlayerId && storedRoomCode && storedDisplayName !== null) {
+      // Set lobby display name for UI
+      setLobby((state) => ({ ...state, displayName: storedDisplayName }));
+      // Attempt reconnect after socket is connected
+      const tryReconnect = () => {
+        socket.emit(CLIENT_TO_SERVER.RECONNECT_ROOM, {
+          playerId: storedPlayerId,
+          roomCode: storedRoomCode,
+          displayName: storedDisplayName
+        });
+      };
+      if (socket.connected) {
+        tryReconnect();
+      } else {
+        socket.once("connect", tryReconnect);
       }
 
-      return {
-        ...state,
-        roomCodeInput: sanitized
+      // Listen for reconnect result
+      const onReconnectSuccess = (payload) => {
+        setPlayerId(payload.playerId);
+        playerIdRef.current = payload.playerId;
+        setSeat(payload.seat);
+        setRoomCode(payload.roomCode);
+        setRoomDifficulty(payload.difficulty);
+        setStatus("Reconnected to room " + payload.roomCode);
+        pushToast("Session restored!", "success");
+        // Optionally surface game/chat window
       };
-    });
+      const onReconnectError = (payload) => {
+        // Clear session info and reset lobby
+        window.localStorage.removeItem("ff_playerId");
+        window.localStorage.removeItem("ff_roomCode");
+        window.localStorage.removeItem("ff_displayName");
+        setPlayerId(null);
+        setRoomCode(null);
+        setLobby((state) => ({ ...state, roomCodeInput: "", displayName: "" }));
+        setStatus("Reconnect failed. Please join or create a new room.");
+        pushToast("Reconnect failed. Please join or create a new room.", "error");
+      };
+      socket.once(SERVER_TO_CLIENT.RECONNECT_SUCCESS, onReconnectSuccess);
+      socket.once(SERVER_TO_CLIENT.ACTION_ERROR, (payload) => {
+        if (payload.code === "INVALID_STATE" || payload.code === "ROOM_NOT_FOUND") {
+          onReconnectError(payload);
+        }
+      });
+    }
   }, []);
 
   useEffect(() => {
@@ -742,6 +789,11 @@ export function App() {
       surfaceDesktopWindow("chat");
       setStatus(`Room ${payload.roomCode} created. Waiting for opponent.`);
       pushToast(`Room ${payload.roomCode} is live. Waiting for rival.`, "success");
+        // Log and save session info
+        console.log("[SESSION] ROOM_CREATED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
+        window.localStorage.setItem("ff_playerId", payload.playerId);
+        window.localStorage.setItem("ff_roomCode", payload.roomCode);
+        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
     });
 
     socket.on(SERVER_TO_CLIENT.ROOM_JOINED, (payload: RoomCreatedPayload) => {
@@ -753,6 +805,11 @@ export function App() {
       surfaceDesktopWindow("chat");
       setStatus(`Joined room ${payload.roomCode}. Starting game...`);
       pushToast(`Joined room ${payload.roomCode}. Syncing mission.`, "success");
+        // Log and save session info
+        console.log("[SESSION] ROOM_JOINED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
+        window.localStorage.setItem("ff_playerId", payload.playerId);
+        window.localStorage.setItem("ff_roomCode", payload.roomCode);
+        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
     });
 
     socket.on(SERVER_TO_CLIENT.GAME_STARTED, (payload: GameStartedPayload) => {
@@ -778,6 +835,11 @@ export function App() {
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("Game started");
       pushToast(`Round ${payload.roundNumber} is live.`, "success");
+        // Log and save session info
+        console.log("[SESSION] GAME_STARTED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
+        window.localStorage.setItem("ff_playerId", payload.playerId);
+        window.localStorage.setItem("ff_roomCode", payload.roomCode);
+        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
     });
 
     socket.on(SERVER_TO_CLIENT.NEW_GAME_STARTED, (payload: GameStartedPayload) => {
@@ -804,6 +866,11 @@ export function App() {
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("New game started");
       pushToast("Rematch deployed. New intel assigned.", "success");
+        // Log and save session info
+        console.log("[SESSION] NEW_GAME_STARTED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
+        window.localStorage.setItem("ff_playerId", payload.playerId);
+        window.localStorage.setItem("ff_roomCode", payload.roomCode);
+        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
     });
 
     socket.on(SERVER_TO_CLIENT.TURN_STATE_CHANGED, (payload: { state: TurnState }) => {

@@ -30,7 +30,6 @@ function getAllowedOrigins() {
     .split(",")
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
-}
 
 function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]) {
   if (!origin) {
@@ -282,6 +281,7 @@ export function createRealtimeApp() {
 
     socket.on(CLIENT_TO_SERVER.JOIN_ROOM, (payload: JoinRoomPayload) => {
       if (shouldRateLimit(socket)) {
+        console.log(`[RECONNECT_ROOM] Received from socket ${socket.id}:`, payload);
         emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
         return;
       }
@@ -312,6 +312,8 @@ export function createRealtimeApp() {
         difficulty: room.difficulty
       });
 
+        // Backend logging: Reconnect result sent
+        console.log(`[RECONNECT_ROOM] RECONNECT_SUCCESS sent to socket ${socket.id} for playerId=${player.playerId}, roomCode=${room.roomCode}`);
       io.to(room.roomCode).emit(SERVER_TO_CLIENT.PLAYER_JOINED, {
         playerId: player.playerId,
         seat: player.seat
@@ -327,7 +329,6 @@ export function createRealtimeApp() {
           }
         }
       }
-    });
 
     socket.on(CLIENT_TO_SERVER.RECONNECT_ROOM, (payload: ReconnectRoomPayload) => {
       if (shouldRateLimit(socket)) {
@@ -677,8 +678,6 @@ export function createRealtimeApp() {
   });
 
   return { app, io, httpServer };
-}
-
 export function startServer(
   port = Number(process.env.PORT ?? 3001),
   host = process.env.HOST ?? "0.0.0.0"
