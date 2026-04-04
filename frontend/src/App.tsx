@@ -37,7 +37,8 @@ import { IntelSubpanel } from "./intel-subpanel";
 import { GlitchEffects, MapFlyingDots } from "./glitch-effects";
 import { useRef as useGlitchRef, useEffect as useGlitchEffect } from "react";
 import type { SVGProps } from "react";
-const WorldSVG = (require("./world.svg?react") as { default: React.FC<SVGProps<SVGSVGElement>> }).default;
+import WorldSVGImport from "./world.svg?react";
+const WorldSVG = WorldSVGImport as React.FC<SVGProps<SVGSVGElement>>;
 import {
   DESKTOP_WINDOW_BREAKPOINT,
   DESKTOP_WINDOW_STORAGE_KEY,
