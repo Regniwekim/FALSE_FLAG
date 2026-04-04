@@ -27,6 +27,12 @@ export class EventValidator {
     if (!trimmed || !trimmed.endsWith("?")) {
       return fail(ERROR_CODES.INVALID_QUESTION_FORMAT, "Question must end with a question mark.");
     }
+    if (trimmed.length > 200) {
+      return fail(ERROR_CODES.INVALID_QUESTION_FORMAT, "Question is too long.");
+    }
+    if (/\r?\n/.test(trimmed)) {
+      return fail(ERROR_CODES.INVALID_QUESTION_FORMAT, "Question must be a single line.");
+    }
     return { ok: true };
   }
 
@@ -91,6 +97,9 @@ export class EventValidator {
     const trimmed = text.trim();
     if (!trimmed) {
       return fail(ERROR_CODES.INVALID_TEXT, "Chat text cannot be empty.");
+    }
+    if (/\r?\n/.test(trimmed)) {
+      return fail(ERROR_CODES.INVALID_TEXT, "Chat text must be a single line.");
     }
     if (trimmed.length > 200) {
       return fail(ERROR_CODES.TEXT_TOO_LONG, "Chat text is too long.");

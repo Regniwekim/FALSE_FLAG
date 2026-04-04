@@ -20,6 +20,7 @@ import {
 import { RoomManager } from "./room-manager.js";
 import { GameEngine } from "./game-engine.js";
 import { EventValidator } from "./event-validator.js";
+import { auditLog } from "./audit-logger.js";
 import type { RoomState } from "./types.js";
 
 const NEXT_ROUND_TRANSITION_MS = 1200;
@@ -47,11 +48,22 @@ function isAllowedOrigin(origin: string | undefined, allowedOrigins: string[]) {
   return allowedOrigins.includes(origin);
 }
 
-function emitError(socket: Socket, code: string, message: string) {
+function emitError(socket: Socket, code: string, message: string, details: Record<string, unknown> = {}) {
+  auditLog("action_error", { socketId: socket.id, code, message, ...details });
   socket.emit(SERVER_TO_CLIENT.ACTION_ERROR, { code, message });
 }
 
-const ROOM_CLEANUP_GRACE_MS = 30_000;
+function getRoomCleanupGraceMs() {
+  if (typeof process.env.ROOM_CLEANUP_GRACE_MS === "string" && process.env.ROOM_CLEANUP_GRACE_MS.trim().length > 0) {
+    const parsed = Number(process.env.ROOM_CLEANUP_GRACE_MS);
+    if (!Number.isNaN(parsed) && parsed >= 0) {
+      return parsed;
+    }
+  }
+
+  return 30_000;
+}
+
 const RATE_LIMIT_WINDOW_MS = 1000;
 const MAX_EVENTS_PER_WINDOW = 8;
 
@@ -61,10 +73,7 @@ const processedEventIds = new Map<string, Set<string>>();
 let totalDisconnects = 0;
 let totalRateLimited = 0;
 let totalDuplicateEvents = 0;
-
-function auditLog(event: string, details: Record<string, unknown>) {
-  console.warn(JSON.stringify({ event, ...details, timestamp: new Date().toISOString() }));
-}
+let totalRoomsClosed = 0;
 
 function shouldRateLimit(socket: Socket) {
   const now = Date.now();
@@ -125,8 +134,9 @@ function scheduleRoomCleanup(roomManager: RoomManager, room: RoomState) {
   const timer = setTimeout(() => {
     roomManager.closeRoom(room.roomCode);
     roomCleanupTimers.delete(room.roomCode);
+    totalRoomsClosed += 1;
     auditLog("room_closed", { roomCode: room.roomCode, reason: "disconnect_timeout" });
-  }, ROOM_CLEANUP_GRACE_MS);
+  }, getRoomCleanupGraceMs());
   roomCleanupTimers.set(room.roomCode, timer);
 }
 
@@ -141,6 +151,9 @@ function updateRoomCleanup(roomManager: RoomManager, room: RoomState) {
 function getStatusPayload(roomManager: RoomManager) {
   return {
     activeRooms: roomManager.getRoomCount(),
+    pendingRoomCleanups: roomCleanupTimers.size,
+    roomCleanupGraceMs: getRoomCleanupGraceMs(),
+    roomsClosed: totalRoomsClosed,
     totalDisconnects,
     totalRateLimited,
     totalDuplicateEvents,

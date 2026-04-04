@@ -132,6 +132,7 @@ Local development works without extra environment variables. The repository incl
 | `HOST` | backend | `0.0.0.0` | Backend bind host |
 | `PORT` | backend | `3001` | Backend port |
 | `CORS_ORIGINS` | backend | empty | Comma-separated browser allowlist; if unset, the backend allows all origins |
+| `AUDIT_LOG_FILE` | backend | empty | Optional path to append structured audit logs as JSON lines |
 | `VITE_SOCKET_URL` | frontend | `http://<current-hostname>:3001` | Override Socket.IO target for deployed or split environments |
 
 ## Testing

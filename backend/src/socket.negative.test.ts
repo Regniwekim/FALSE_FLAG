@@ -61,6 +61,11 @@ describe("Socket negative cases", () => {
     const malformed = waitForEvent<ActionErrorPayload>(p1, SERVER_TO_CLIENT.ACTION_ERROR);
     p1.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: "Not valid" });
     expect((await malformed).code).toBe("INVALID_QUESTION_FORMAT");
+
+    const longQuestion = `Is it ${"a".repeat(196)}?`;
+    const longQuestionError = waitForEvent<ActionErrorPayload>(p1, SERVER_TO_CLIENT.ACTION_ERROR);
+    p1.emit(CLIENT_TO_SERVER.ASK_QUESTION, { question: longQuestion });
+    expect((await longQuestionError).code).toBe("INVALID_QUESTION_FORMAT");
   });
 
   it("rejects invalid actor/state actions for answer, guess, and chat", async () => {

@@ -2270,7 +2270,7 @@ export function App() {
               <div className="volume-wrapper">
                 <button type="button" className={musicPlaying ? "music-on" : "music-off"} onClick={handleMusicToggle} aria-label={musicPlaying ? "Mute music" : "Play music"}>{musicPlaying ? "\uD83D\uDD6A" : "\uD83D\uDD68"}</button>
                 <div className={`volume-slider-popup${!hasGameStarted ? " volume-slider-popup-below" : ""}`}>
-                  <input type="range" min="0" max="1" step="0.01" value={musicVolume} onChange={handleVolumeChange} className="volume-slider" aria-label="Music volume" orient="vertical" />
+                  <input type="range" min="0" max="1" step="0.01" value={musicVolume} onChange={handleVolumeChange} className="volume-slider" aria-label="Music volume" />
                 </div>
               </div>
               <button type="button" onClick={openRulesModal}>How to Play</button>
