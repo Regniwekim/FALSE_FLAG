@@ -36,7 +36,7 @@ import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-pane
 import { IntelSubpanel } from "./intel-subpanel";
 import { GlitchEffects, MapFlyingDots } from "./glitch-effects";
 import { useRef as useGlitchRef, useEffect as useGlitchEffect } from "react";
-import WorldSVG from "../public/world.svg";
+import WorldSVG from "./world.svg?react";
 import {
   DESKTOP_WINDOW_BREAKPOINT,
   DESKTOP_WINDOW_STORAGE_KEY,
@@ -399,9 +399,9 @@ const FlagMarker = memo(function FlagMarker({
 
 
 function WorldMapBackdrop({ glitchCountryId }: { glitchCountryId?: string }) {
-  // Render SVG as an <img> since Vite imports SVGs as URLs
+  // Render SVG inline for direct DOM access and styling
   return (
-    <img src={WorldSVG} className="world-map-svg" aria-hidden="true" draggable={false} />
+    <WorldSVG className="world-map-svg" aria-hidden="true" draggable={false} />
   );
 }
 

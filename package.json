@@ -21,6 +21,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
-    "concurrently": "^9.0.1"
+    "@svgr/plugin-jsx": "^8.1.0",
+    "concurrently": "^9.0.1",
+    "vite-plugin-svgr": "^5.2.0"
   }
 }
