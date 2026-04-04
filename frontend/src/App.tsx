@@ -28,7 +28,8 @@ import {
   playWrongGuess,
   playButtonClick,
   startBackgroundMusic,
-  toggleBackgroundMusic
+  toggleBackgroundMusic,
+  setBackgroundMusicVolume
 } from "./audio";
 import { DesktopWindow } from "./desktop-window";
 import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-panel";
@@ -450,6 +451,7 @@ export function App() {
   const [desktopWindows, setDesktopWindows] = useState(() => loadPersistedDesktopWindows(initialViewportSize.width, initialViewportSize.height));
   const [collapsedWindows, setCollapsedWindows] = useState<CollapsedWindowsState>({ intel: false, chat: false });
   const [musicPlaying, setMusicPlaying] = useState(false);
+  const [musicVolume, setMusicVolume] = useState(0.3);
   const flagMarkerPositions: FlagMarkerPositions = WORLD_MAP_MARKER_POSITIONS;
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
@@ -948,8 +950,33 @@ export function App() {
   }, [roomCode]);
 
   const handleMusicToggle = () => {
-    const playing = toggleBackgroundMusic();
-    setMusicPlaying(playing);
+    // If muted (volume 0), restore to previous or default volume
+    if (musicVolume === 0) {
+      setMusicVolume(0.3);
+      setBackgroundMusicVolume(0.3);
+      setMusicPlaying(true);
+    } else {
+      const playing = toggleBackgroundMusic();
+      setMusicPlaying(playing);
+    }
+  };
+
+  const handleVolumeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const vol = parseFloat(e.target.value);
+    setMusicVolume(vol);
+    setBackgroundMusicVolume(vol);
+    if (vol === 0) {
+      // Mute
+      setMusicPlaying(false);
+      // Pause audio if not already paused
+      toggleBackgroundMusic();
+    } else {
+      // Unmute if previously muted
+      if (!musicPlaying) {
+        startBackgroundMusic();
+        setMusicPlaying(true);
+      }
+    }
   };
 
   const createRoom = () => {
@@ -2240,7 +2267,12 @@ export function App() {
               <h1>.false_flag//GLOBAL SIGNAL</h1>
             </div>
             <div className="hero-actions">
-              <button type="button" className="music-toggle" onClick={handleMusicToggle} aria-label={musicPlaying ? "Mute music" : "Play music"}>{musicPlaying ? "\u266B" : "\u2669"}</button>
+              <div className="volume-wrapper">
+                <button type="button" className={musicPlaying ? "music-on" : "music-off"} onClick={handleMusicToggle} aria-label={musicPlaying ? "Mute music" : "Play music"}>{musicPlaying ? "\uD83D\uDD6A" : "\uD83D\uDD68"}</button>
+                <div className={`volume-slider-popup${!hasGameStarted ? " volume-slider-popup-below" : ""}`}>
+                  <input type="range" min="0" max="1" step="0.01" value={musicVolume} onChange={handleVolumeChange} className="volume-slider" aria-label="Music volume" orient="vertical" />
+                </div>
+              </div>
               <button type="button" onClick={openRulesModal}>How to Play</button>
               <button type="button" onClick={openCreditsModal}>Credits</button>
             </div>

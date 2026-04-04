@@ -113,3 +113,8 @@ export function isBackgroundMusicPlaying(): boolean {
   const music = getBgMusic();
   return !music.paused;
 }
+
+export function setBackgroundMusicVolume(volume: number): void {
+  const music = getBgMusic();
+  music.volume = Math.max(0, Math.min(1, volume));
+}
