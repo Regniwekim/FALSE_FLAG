@@ -5,6 +5,12 @@ const WINDOW_MARGIN = 24;
 const WINDOW_TOP_SAFE_AREA = 228;
 export const COLLAPSED_WINDOW_HEIGHT = 64;
 
+const WINDOW_MIN_SIZES: Record<DesktopWindowId, { minWidth: number; minHeight: number }> = {
+  mission: { minWidth: 320, minHeight: 300 },
+  intel: { minWidth: 340, minHeight: 320 },
+  chat: { minWidth: 500, minHeight: 280 }
+};
+
 export type DesktopWindowId = "mission" | "intel" | "chat";
 
 export type DesktopWindowLayout = {
@@ -56,8 +62,7 @@ export function createDefaultDesktopWindows(viewportWidth: number, viewportHeigh
       width: 392,
       height: Math.min(430, availableHeight),
       zIndex: 14,
-      minWidth: 320,
-      minHeight: 300
+      ...WINDOW_MIN_SIZES.mission
     },
     intel: {
       x: viewportWidth - 472,
@@ -65,17 +70,15 @@ export function createDefaultDesktopWindows(viewportWidth: number, viewportHeigh
       width: 432,
       height: Math.min(520, availableHeight),
       zIndex: 13,
-      minWidth: 340,
-      minHeight: 320
+      ...WINDOW_MIN_SIZES.intel
     },
     chat: {
       x: viewportWidth - 532,
       y: viewportHeight - Math.min(360, availableHeight) - WINDOW_MARGIN,
-      width: 376,
+      width: 500,
       height: Math.min(360, availableHeight),
       zIndex: 15,
-      minWidth: 320,
-      minHeight: 280
+      ...WINDOW_MIN_SIZES.chat
     }
   }, viewportWidth, viewportHeight);
 }
@@ -120,9 +123,9 @@ export function loadPersistedDesktopWindows(viewportWidth: number, viewportHeigh
     }
 
     return normalizeDesktopWindows({
-      mission: parsed.mission,
-      intel: parsed.intel,
-      chat: parsed.chat
+      mission: { ...parsed.mission, ...WINDOW_MIN_SIZES.mission },
+      intel: { ...parsed.intel, ...WINDOW_MIN_SIZES.intel },
+      chat: { ...parsed.chat, ...WINDOW_MIN_SIZES.chat }
     }, viewportWidth, viewportHeight);
   } catch {
     return createDefaultDesktopWindows(viewportWidth, viewportHeight);
