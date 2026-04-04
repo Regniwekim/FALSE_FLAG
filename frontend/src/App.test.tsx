@@ -131,7 +131,7 @@ describe("App turn/state control gating", () => {
       expect(within(intelWindow).queryByText("Round Result")).not.toBeInTheDocument();
       expect(within(intelWindow).queryByText("Difficulty")).not.toBeInTheDocument();
       expect(intelProgress).toHaveAttribute("aria-valuenow", "0");
-      expect(within(intelWindow).getByText("0 / 24 flags eliminated")).toBeInTheDocument();
+      expect(within(intelWindow).getByText("0 / 69 flags eliminated")).toBeInTheDocument();
       expect(within(intelWindow).getByText("Uplink")).toBeInTheDocument();
       expect(within(intelWindow).getByText("OFFLINE")).toBeInTheDocument();
       expect(within(hiddenCountryPanel).getByTestId("hidden-country-iso")).toHaveTextContent("US");
@@ -509,7 +509,7 @@ describe("App turn/state control gating", () => {
       expect(updatedUsCard).not.toBeNull();
       expect((updatedUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(true);
       expect(screen.getByRole("progressbar", { name: "Intel gathered" })).toHaveAttribute("aria-valuenow", "4");
-      expect(screen.getByText("1 / 24 flags eliminated")).toBeInTheDocument();
+      expect(screen.getByText("1 / 69 flags eliminated")).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByAltText("US").closest("button") as HTMLButtonElement);
@@ -526,7 +526,7 @@ describe("App turn/state control gating", () => {
       const restoredUsCard = screen.getByAltText("US").closest("button") as HTMLButtonElement | null;
       expect(restoredUsCard).not.toBeNull();
       expect((restoredUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(false);
-      expect(screen.getByText("0 / 24 flags eliminated")).toBeInTheDocument();
+      expect(screen.getByText("0 / 69 flags eliminated")).toBeInTheDocument();
     });
   });
 

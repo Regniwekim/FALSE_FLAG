@@ -87,7 +87,17 @@ type AskedQuestionHistoryEntry = {
   answer: QuestionAnsweredPayload["answer"] | null;
 };
 
-const DEFAULT_FLAG_CODES = [...FULL_FLAG_CATALOG.slice(0, 24)];
+function getRandomFlagCodes(count: number): string[] {
+  // Fisher-Yates shuffle
+  const arr = [...FULL_FLAG_CATALOG];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr.slice(0, count);
+}
+
+const DEFAULT_FLAG_CODES = getRandomFlagCodes(69);
 const DIFFICULTY_LABELS: Record<RoomDifficulty, string> = {
   easy: "Easy (24 countries)",
   medium: "Medium (36 countries)",
