@@ -31,6 +31,7 @@ import {
 import { DesktopWindow } from "./desktop-window";
 import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-panel";
 import { IntelSubpanel } from "./intel-subpanel";
+import { GlitchEffects } from "./glitch-effects";
 import {
   DESKTOP_WINDOW_BREAKPOINT,
   DESKTOP_WINDOW_STORAGE_KEY,
@@ -2164,6 +2165,7 @@ export function App() {
   return (
     <main className="app-shell">
       <div className="app-canvas-noise" aria-hidden="true" />
+      <GlitchEffects />
       <div
         ref={mapViewportRef}
         className={mapCanvasClassName}
