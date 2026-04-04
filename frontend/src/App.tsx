@@ -2493,7 +2493,7 @@ export function App() {
         >
           <div ref={creditsModalRef} className="guess-modal credits-modal" role="dialog" aria-modal="true" aria-labelledby="credits-modal-title">
             <h2 id="credits-modal-title">Credits</h2>
-            <p className="section-subtitle">Source acknowledgements for the typography, map, flag imagery, and country data used by .false_flag//GLOBAL SIGNAL.</p>
+            <p className="section-subtitle">Source acknowledgements for the map, flag imagery, and country data used by .false_flag//GLOBAL SIGNAL.</p>
             <div className="credits-modal-content">
               <section className="credits-resource">
                 <p className="credits-resource-label">SVG World Map</p>
@@ -2526,17 +2526,6 @@ export function App() {
                 </div>
               </section>
 
-              <section className="credits-resource">
-                <p className="credits-resource-label">Typography</p>
-                <h3>Special Gothic Expanded One and Share Tech Mono</h3>
-                <p>Title text uses Special Gothic Expanded One, Copyright 2023 The Special Gothic Project Authors. Body text uses Share Tech Mono, Copyright (c) 2012 Carrois Type Design and Ralph du Carrois. Both fonts are served via Google Fonts under the SIL Open Font License, Version 1.1.</p>
-                <div className="credits-resource-links">
-                  <a href="https://fonts.google.com/specimen/Special+Gothic+Expanded+One" target="_blank" rel="noreferrer">Special Gothic Expanded One source</a>
-                  <a href="https://fonts.google.com/specimen/Special+Gothic+Expanded+One/license" target="_blank" rel="noreferrer">Special Gothic Expanded One license</a>
-                  <a href="https://fonts.google.com/specimen/Share+Tech+Mono" target="_blank" rel="noreferrer">Share Tech Mono source</a>
-                  <a href="https://fonts.google.com/specimen/Share+Tech+Mono/license" target="_blank" rel="noreferrer">Share Tech Mono license</a>
-                </div>
-              </section>
             </div>
             <div className="controls controls-stack modal-actions">
               <button onClick={closeCreditsModal}>Close</button>
