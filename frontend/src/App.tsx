@@ -26,7 +26,9 @@ import {
   playRoundOver,
   playCorrectGuess,
   playWrongGuess,
-  playButtonClick
+  playButtonClick,
+  startBackgroundMusic,
+  toggleBackgroundMusic
 } from "./audio";
 import { DesktopWindow } from "./desktop-window";
 import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-panel";
@@ -447,6 +449,7 @@ export function App() {
   const [isRoundConsoleExpanded, setIsRoundConsoleExpanded] = useState(true);
   const [desktopWindows, setDesktopWindows] = useState(() => loadPersistedDesktopWindows(initialViewportSize.width, initialViewportSize.height));
   const [collapsedWindows, setCollapsedWindows] = useState<CollapsedWindowsState>({ intel: false, chat: false });
+  const [musicPlaying, setMusicPlaying] = useState(false);
   const flagMarkerPositions: FlagMarkerPositions = WORLD_MAP_MARKER_POSITIONS;
   const mapViewportRef = useRef<HTMLDivElement | null>(null);
   const chatListRef = useRef<HTMLDivElement | null>(null);
@@ -944,8 +947,15 @@ export function App() {
     return inviteUrl.toString();
   }, [roomCode]);
 
+  const handleMusicToggle = () => {
+    const playing = toggleBackgroundMusic();
+    setMusicPlaying(playing);
+  };
+
   const createRoom = () => {
     playButtonClick();
+    startBackgroundMusic();
+    setMusicPlaying(true);
     pushToast("Creating room...", "info");
     socket.emit(CLIENT_TO_SERVER.CREATE_ROOM, {
       displayName: lobby.displayName || undefined,
@@ -955,6 +965,8 @@ export function App() {
 
   const joinRoom = () => {
     playButtonClick();
+    startBackgroundMusic();
+    setMusicPlaying(true);
     pushToast(`Joining room ${lobby.roomCodeInput.trim().toUpperCase()}...`, "info");
     socket.emit(CLIENT_TO_SERVER.JOIN_ROOM, {
       roomCode: lobby.roomCodeInput.trim().toUpperCase(),
@@ -2228,6 +2240,7 @@ export function App() {
               <h1>.false_flag//GLOBAL SIGNAL</h1>
             </div>
             <div className="hero-actions">
+              <button type="button" className="music-toggle" onClick={handleMusicToggle} aria-label={musicPlaying ? "Mute music" : "Play music"}>{musicPlaying ? "\u266B" : "\u2669"}</button>
               <button type="button" onClick={openRulesModal}>How to Play</button>
               <button type="button" onClick={openCreditsModal}>Credits</button>
             </div>

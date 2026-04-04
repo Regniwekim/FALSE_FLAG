@@ -72,3 +72,44 @@ export function playButtonClick() {
   // Short click for UI interactions
   playTone(880, 0.05);
 }
+
+/* ── Background music ── */
+
+let bgMusic: HTMLAudioElement | null = null;
+
+function getBgMusic(): HTMLAudioElement {
+  if (!bgMusic) {
+    bgMusic = new Audio("/Brass_Switches.mp3");
+    bgMusic.loop = true;
+    bgMusic.volume = 0.3;
+  }
+  return bgMusic;
+}
+
+export function startBackgroundMusic(): void {
+  try {
+    const music = getBgMusic();
+    if (music.paused) {
+      music.play().catch(() => {
+        // Autoplay blocked — will retry on next user gesture.
+      });
+    }
+  } catch {
+    // Audio not available; silently continue.
+  }
+}
+
+export function toggleBackgroundMusic(): boolean {
+  const music = getBgMusic();
+  if (music.paused) {
+    music.play().catch(() => {});
+    return true;
+  }
+  music.pause();
+  return false;
+}
+
+export function isBackgroundMusicPlaying(): boolean {
+  const music = getBgMusic();
+  return !music.paused;
+}

@@ -610,6 +610,22 @@ button:disabled {
   text-transform: uppercase;
 }
 
+.music-toggle {
+  font-size: 1.1rem;
+  min-width: 32px;
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border-neon);
+  color: var(--color-cyan);
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease;
+}
+
+.music-toggle:hover {
+  border-color: var(--color-magenta);
+  color: var(--color-magenta);
+}
+
 .score-ribbon {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr) minmax(0, 1fr);
