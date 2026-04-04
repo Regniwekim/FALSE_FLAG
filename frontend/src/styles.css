@@ -2471,3 +2471,50 @@ button:disabled {
   }
 }
 
+/* ── Flying-dot signal trace ─────────────────────────────── */
+
+.flying-dots-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.map-glitch-burst {
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.flying-dot {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #00f0ff;
+  box-shadow: 0 0 6px 2px rgba(0, 240, 255, 0.6);
+  pointer-events: none;
+  animation-name: flying-dot-move;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: left, top, opacity;
+}
+
+@keyframes flying-dot-move {
+  0% {
+    left: var(--from-x);
+    top: var(--from-y);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    left: var(--to-x);
+    top: var(--to-y);
+    opacity: 0;
+  }
+}
+

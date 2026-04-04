@@ -31,7 +31,7 @@ import {
 import { DesktopWindow } from "./desktop-window";
 import { CompactCountryInfobox, HiddenCountryPanel } from "./hidden-country-panel";
 import { IntelSubpanel } from "./intel-subpanel";
-import { GlitchEffects } from "./glitch-effects";
+import { GlitchEffects, MapFlyingDots } from "./glitch-effects";
 import {
   DESKTOP_WINDOW_BREAKPOINT,
   DESKTOP_WINDOW_STORAGE_KEY,
@@ -2195,6 +2195,7 @@ export function App() {
           <div className="map-tile">
             <WorldMapBackdrop />
           </div>
+          <MapFlyingDots />
           {activeFlagCodes.map((flagCode) => {
             const marker = getMarkerForFlag(flagCode, flagMarkerPositions);
             return (
