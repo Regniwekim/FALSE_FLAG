@@ -172,6 +172,45 @@ $env:FRONTEND_URL = "https://<frontend-domain>"
 npm run smoke:render
 ```
 
+
+## Week 4: Production Readiness & Release Checklist
+
+### Staging Soak Test & Validation Steps
+
+Before releasing to production, validate the following in a deployed staging environment:
+
+- [ ] **Reconnect/session continuity:** Disconnect and reconnect a player; verify session is restored and private state is correct.
+- [ ] **Rate limiting:** Rapidly send actions (ask, answer, guess, chat) and confirm rate limit errors are returned and logged.
+- [ ] **Invalid actions:** Attempt out-of-turn, malformed, or duplicate actions; verify errors are returned and no state is corrupted.
+- [ ] **Match completion:** Play a full best-of-5 match, including round transitions and rematch flow.
+- [ ] **Backend logs:** Confirm audit logs are written for invalid, rate-limited, and duplicate events (if AUDIT_LOG_FILE is set).
+- [ ] **Metrics:** Check `/status` endpoint for accurate room, disconnect, rate limit, and duplicate event counts.
+- [ ] **Frontend/Backend health:** Confirm `/health` endpoint returns `{ "ok": true }` and frontend loads without errors.
+
+### Render Deployment Environment Variables
+
+**Backend:**
+- `NODE_ENV=production`
+- `PORT=3001` (default)
+- `CORS_ORIGINS=https://<frontend-domain>` (set to your deployed frontend URL)
+- `AUDIT_LOG_FILE=/data/audit.log` (optional, enables persistent audit logging)
+
+**Frontend:**
+- `VITE_SOCKET_URL=https://<backend-domain>` (set to your deployed backend URL)
+
+See [render.yaml](render.yaml) for full service definitions.
+
+### Release Checklist
+
+- [ ] All Week 4 backend features (rate limiting, reconnect, audit logging, input validation, idempotency, cleanup, metrics) are implemented and tested.
+- [ ] CI workflow passes (build, typecheck, backend tests, frontend tests, smoke checks).
+- [ ] Staging soak test (above) is completed and all checks pass.
+- [ ] README and roadmap are up to date with deployment and validation instructions.
+- [ ] Render environment variables are set for production.
+- [ ] Demo URL is live and accessible.
+
+---
+
 ## Additional docs
 
 - [docs/week0/architecture-freeze.md](docs/week0/architecture-freeze.md)

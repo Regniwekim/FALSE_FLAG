@@ -122,6 +122,7 @@
   1. Staging soak test passes.
   2. Zero critical/high issues.
   3. Demo URL and setup docs ready.
+  4. Staging soak test and release checklist completed (see README.md for validation steps).
 
 **Detailed workstreams**
 1. Backend workstream
