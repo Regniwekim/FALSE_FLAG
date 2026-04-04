@@ -1534,9 +1534,15 @@ export function App() {
       const nextDistance = Math.hypot(touchB.clientX - touchA.clientX, touchB.clientY - touchA.clientY);
       const currentViewportState = pendingViewportStateRef.current ?? { zoom: zoomRef.current, pan: panRef.current };
       const nextZoom = Math.max(1, Math.min(4, currentViewportState.zoom * (nextDistance / pinchDistanceRef.current)));
+      const scaleRatio = nextZoom / currentViewportState.zoom;
+
+      const rect = mapViewportRef.current!.getBoundingClientRect();
+      const midX = (touchA.clientX + touchB.clientX) / 2 - rect.left;
+      const midY = (touchA.clientY + touchB.clientY) / 2 - rect.top;
+
       scheduleViewportState(nextZoom, {
-        x: clampPanX(currentViewportState.pan.x, nextZoom),
-        y: clampPanY(currentViewportState.pan.y, nextZoom)
+        x: clampPanX(midX - (midX - currentViewportState.pan.x) * scaleRatio, nextZoom),
+        y: clampPanY(midY - (midY - currentViewportState.pan.y) * scaleRatio, nextZoom)
       });
       pinchDistanceRef.current = nextDistance;
       return;
