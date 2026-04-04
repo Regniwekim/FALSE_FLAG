@@ -1,6 +1,7 @@
 export const CLIENT_TO_SERVER = {
   CREATE_ROOM: "create-room",
   JOIN_ROOM: "join-room",
+  RECONNECT_ROOM: "reconnect-room",
   ASK_QUESTION: "ask-question",
   ANSWER_QUESTION: "answer-question",
   SET_FLAG_ELIMINATION: "set-flag-elimination",
@@ -13,6 +14,7 @@ export const CLIENT_TO_SERVER = {
 export const SERVER_TO_CLIENT = {
   ROOM_CREATED: "room-created",
   ROOM_JOINED: "room-joined",
+  RECONNECT_SUCCESS: "reconnect-success",
   GAME_STARTED: "game-started",
   QUESTION_ACCEPTED: "question-accepted",
   INCOMING_QUESTION: "incoming-question",

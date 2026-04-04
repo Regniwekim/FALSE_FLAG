@@ -10,6 +10,7 @@ import {
   type CreateRoomPayload,
   type RoomDifficulty,
   type JoinRoomPayload,
+  type ReconnectRoomPayload,
   type AskQuestionPayload,
   type AnswerQuestionPayload,
   type MakeGuessPayload,
@@ -50,6 +51,103 @@ function emitError(socket: Socket, code: string, message: string) {
   socket.emit(SERVER_TO_CLIENT.ACTION_ERROR, { code, message });
 }
 
+const ROOM_CLEANUP_GRACE_MS = 30_000;
+const RATE_LIMIT_WINDOW_MS = 1000;
+const MAX_EVENTS_PER_WINDOW = 8;
+
+const roomCleanupTimers = new Map<string, NodeJS.Timeout>();
+const eventRateState = new Map<string, { windowStart: number; count: number }>();
+const processedEventIds = new Map<string, Set<string>>();
+let totalDisconnects = 0;
+let totalRateLimited = 0;
+let totalDuplicateEvents = 0;
+
+function auditLog(event: string, details: Record<string, unknown>) {
+  console.warn(JSON.stringify({ event, ...details, timestamp: new Date().toISOString() }));
+}
+
+function shouldRateLimit(socket: Socket) {
+  const now = Date.now();
+  const state = eventRateState.get(socket.id);
+  if (!state || now - state.windowStart >= RATE_LIMIT_WINDOW_MS) {
+    eventRateState.set(socket.id, { windowStart: now, count: 1 });
+    return false;
+  }
+
+  state.count += 1;
+  if (state.count > MAX_EVENTS_PER_WINDOW) {
+    totalRateLimited += 1;
+    auditLog("rate_limited", { socketId: socket.id, count: state.count });
+    return true;
+  }
+
+  return false;
+}
+
+function isDuplicateEvent(socket: Socket, payload: { clientEventId?: string }, actorPlayerId?: string) {
+  const eventId = payload?.clientEventId;
+  if (!eventId) {
+    return false;
+  }
+
+  const dedupeKey = actorPlayerId ?? socket.id;
+  let idSet = processedEventIds.get(dedupeKey);
+  if (!idSet) {
+    idSet = new Set();
+    processedEventIds.set(dedupeKey, idSet);
+  }
+
+  if (idSet.has(eventId)) {
+    totalDuplicateEvents += 1;
+    auditLog("duplicate_event", { socketId: socket.id, playerId: actorPlayerId, eventId });
+    return true;
+  }
+
+  idSet.add(eventId);
+  if (idSet.size > 1000) {
+    const [first] = idSet;
+    idSet.delete(first);
+  }
+  return false;
+}
+
+function cancelRoomCleanup(roomCode: string) {
+  const timer = roomCleanupTimers.get(roomCode);
+  if (!timer) {
+    return;
+  }
+  clearTimeout(timer);
+  roomCleanupTimers.delete(roomCode);
+}
+
+function scheduleRoomCleanup(roomManager: RoomManager, room: RoomState) {
+  cancelRoomCleanup(room.roomCode);
+  const timer = setTimeout(() => {
+    roomManager.closeRoom(room.roomCode);
+    roomCleanupTimers.delete(room.roomCode);
+    auditLog("room_closed", { roomCode: room.roomCode, reason: "disconnect_timeout" });
+  }, ROOM_CLEANUP_GRACE_MS);
+  roomCleanupTimers.set(room.roomCode, timer);
+}
+
+function updateRoomCleanup(roomManager: RoomManager, room: RoomState) {
+  if (room.players.every((player) => player.socketId === null)) {
+    scheduleRoomCleanup(roomManager, room);
+    return;
+  }
+  cancelRoomCleanup(room.roomCode);
+}
+
+function getStatusPayload(roomManager: RoomManager) {
+  return {
+    activeRooms: roomManager.getRoomCount(),
+    totalDisconnects,
+    totalRateLimited,
+    totalDuplicateEvents,
+    timestamp: new Date().toISOString()
+  };
+}
+
 function emitRoomChatMessage(io: Server, room: RoomState, fromPlayerId: string, text: string) {
   const message = {
     fromPlayerId,
@@ -69,12 +167,15 @@ function normalizeDifficulty(candidate: unknown): RoomDifficulty {
 
 function emitPrivateState(io: Server, gameEngine: GameEngine, room: RoomState) {
   for (const roomPlayer of room.players) {
-    const targetSocket = io.sockets.sockets.get(roomPlayer.socketId);
+    const targetSocket = roomPlayer.socketId ? io.sockets.sockets.get(roomPlayer.socketId) : undefined;
     const view = gameEngine.getPlayerView(room, roomPlayer.playerId);
     if (targetSocket && view) {
       targetSocket.emit(SERVER_TO_CLIENT.SYNC_STATE, {
+        roundNumber: room.round?.roundNumber,
         turnState: room.round?.turnState,
         activePlayerId: room.round?.activePlayerId,
+        yourSecretFlag: view.yourSecretFlag,
+        availableFlagCodes: view.availableFlagCodes,
         yourBoardState: view.yourBoardState,
         roomStatus: room.status
       });
@@ -85,6 +186,14 @@ function emitPrivateState(io: Server, gameEngine: GameEngine, room: RoomState) {
 export function createRealtimeApp() {
   const app = express();
   const allowedOrigins = getAllowedOrigins();
+
+  roomCleanupTimers.forEach((timer) => clearTimeout(timer));
+  roomCleanupTimers.clear();
+  eventRateState.clear();
+  processedEventIds.clear();
+  totalDisconnects = 0;
+  totalRateLimited = 0;
+  totalDuplicateEvents = 0;
 
   if (allowedOrigins.length === 0 && process.env.NODE_ENV !== "test") {
     console.warn("CORS_ORIGINS is not set. Allowing all origins.");
@@ -126,8 +235,21 @@ export function createRealtimeApp() {
   const gameEngine = new GameEngine();
   const validator = new EventValidator();
 
+  app.get("/status", (_req: express.Request, res: express.Response) => {
+    res.json(getStatusPayload(roomManager));
+  });
+
   io.on("connection", (socket) => {
     socket.on(CLIENT_TO_SERVER.CREATE_ROOM, (payload: CreateRoomPayload = {}) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
+        return;
+      }
+
       const existingRoom = roomManager.findPlayerRoom(socket.id);
       if (existingRoom) {
         emitError(socket, ERROR_CODES.ALREADY_IN_ROOM, "You are already in a room.");
@@ -146,6 +268,14 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.JOIN_ROOM, (payload: JoinRoomPayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
+        return;
+      }
       const existingRoom = roomManager.findPlayerRoom(socket.id);
       if (existingRoom) {
         emitError(socket, ERROR_CODES.ALREADY_IN_ROOM, "You are already in a room.");
@@ -177,7 +307,7 @@ export function createRealtimeApp() {
       if (room.players.length === 2) {
         gameEngine.initializeRound(room);
         for (const roomPlayer of room.players) {
-          const targetSocket = io.sockets.sockets.get(roomPlayer.socketId);
+          const targetSocket = roomPlayer.socketId ? io.sockets.sockets.get(roomPlayer.socketId) : undefined;
           const view = gameEngine.getPlayerView(room, roomPlayer.playerId);
           if (targetSocket && view) {
             targetSocket.emit(SERVER_TO_CLIENT.GAME_STARTED, view);
@@ -186,7 +316,56 @@ export function createRealtimeApp() {
       }
     });
 
+    socket.on(CLIENT_TO_SERVER.RECONNECT_ROOM, (payload: ReconnectRoomPayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload, payload.playerId)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
+        return;
+      }
+
+      const room = roomManager.getRoom(payload.roomCode);
+      if (!room) {
+        emitError(socket, ERROR_CODES.ROOM_NOT_FOUND, "Room not found.");
+        return;
+      }
+
+      const player = room.players.find((player) => player.playerId === payload.playerId);
+      if (!player) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Player session not found.");
+        return;
+      }
+
+      player.socketId = socket.id;
+      socket.join(room.roomCode);
+      cancelRoomCleanup(room.roomCode);
+
+      socket.emit(SERVER_TO_CLIENT.RECONNECT_SUCCESS, {
+        roomCode: room.roomCode,
+        playerId: player.playerId,
+        seat: player.seat,
+        difficulty: room.difficulty,
+        roomStatus: room.status
+      });
+
+      if (room.players.some((roomPlayer) => roomPlayer.playerId !== player.playerId && roomPlayer.socketId)) {
+        socket.to(room.roomCode).emit(SERVER_TO_CLIENT.PLAYER_JOINED, {
+          playerId: player.playerId,
+          seat: player.seat
+        });
+      }
+
+      emitPrivateState(io, gameEngine, room);
+    });
+
     socket.on(CLIENT_TO_SERVER.ASK_QUESTION, (payload: AskQuestionPayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room || !room.round) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -196,6 +375,10 @@ export function createRealtimeApp() {
       const actor = room.players.find((player) => player.socketId === socket.id);
       if (!actor) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "Player not found in room.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload, actor.playerId)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
         return;
       }
 
@@ -221,6 +404,11 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.ANSWER_QUESTION, (payload: AnswerQuestionPayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room || !room.round || !room.round.pendingQuestion) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No question is awaiting an answer.");
@@ -230,6 +418,10 @@ export function createRealtimeApp() {
       const actor = room.players.find((player) => player.socketId === socket.id);
       if (!actor) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "Player not found in room.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload, actor.playerId)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
         return;
       }
 
@@ -253,6 +445,11 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.END_TURN, () => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room || !room.round) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -279,6 +476,11 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.MAKE_GUESS, (payload: MakeGuessPayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room || !room.round) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -288,6 +490,10 @@ export function createRealtimeApp() {
       const actor = room.players.find((player) => player.socketId === socket.id);
       if (!actor) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "Player not found in room.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload, actor.playerId)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
         return;
       }
 
@@ -326,13 +532,13 @@ export function createRealtimeApp() {
           upcomingRoundNumber: room.championship.roundsPlayed + 1
         });
         setTimeout(() => {
-          if (!room.players.every((roomPlayer) => io.sockets.sockets.has(roomPlayer.socketId))) {
+          if (!room.players.every((roomPlayer) => roomPlayer.socketId && io.sockets.sockets.has(roomPlayer.socketId))) {
             return;
           }
 
           gameEngine.initializeRound(room);
           for (const roomPlayer of room.players) {
-            const targetSocket = io.sockets.sockets.get(roomPlayer.socketId);
+            const targetSocket = roomPlayer.socketId ? io.sockets.sockets.get(roomPlayer.socketId) : undefined;
             const view = gameEngine.getPlayerView(room, roomPlayer.playerId);
             if (targetSocket && view) {
               targetSocket.emit(SERVER_TO_CLIENT.GAME_STARTED, view);
@@ -347,6 +553,11 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.SET_FLAG_ELIMINATION, (payload: SetFlagEliminationPayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room || !room.round) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -377,6 +588,11 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.CHAT_MESSAGE, (payload: ChatMessagePayload) => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -385,6 +601,10 @@ export function createRealtimeApp() {
       const actor = room.players.find((player) => player.socketId === socket.id);
       if (!actor) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "Player not found in room.");
+        return;
+      }
+      if (isDuplicateEvent(socket, payload, actor.playerId)) {
+        emitError(socket, ERROR_CODES.INVALID_STATE, "Duplicate request ignored.");
         return;
       }
 
@@ -398,6 +618,11 @@ export function createRealtimeApp() {
     });
 
     socket.on(CLIENT_TO_SERVER.NEW_GAME, () => {
+      if (shouldRateLimit(socket)) {
+        emitError(socket, ERROR_CODES.RATE_LIMITED, "Too many actions. Please wait a moment.");
+        return;
+      }
+
       const room = roomManager.findPlayerRoom(socket.id);
       if (!room) {
         emitError(socket, ERROR_CODES.INVALID_STATE, "No active game room.");
@@ -411,7 +636,7 @@ export function createRealtimeApp() {
 
       gameEngine.resetMatch(room);
       for (const roomPlayer of room.players) {
-        const targetSocket = io.sockets.sockets.get(roomPlayer.socketId);
+        const targetSocket = roomPlayer.socketId ? io.sockets.sockets.get(roomPlayer.socketId) : undefined;
         const view = gameEngine.getPlayerView(room, roomPlayer.playerId);
         if (targetSocket && view) {
           targetSocket.emit(SERVER_TO_CLIENT.NEW_GAME_STARTED, view);
@@ -429,7 +654,12 @@ export function createRealtimeApp() {
       if (!player) {
         return;
       }
+
+      player.socketId = null;
+      totalDisconnects += 1;
+      auditLog("player_disconnected", { roomCode: room.roomCode, playerId: player.playerId });
       socket.to(room.roomCode).emit(SERVER_TO_CLIENT.PLAYER_LEFT, { playerId: player.playerId });
+      updateRoomCleanup(roomManager, room);
     });
   });
 

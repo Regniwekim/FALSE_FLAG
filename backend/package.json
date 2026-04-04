@@ -9,7 +9,7 @@
     "prebuild": "npm run clean",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "cd .. && npm run build -w shared && cd backend && vitest run"
   },
   "dependencies": {
     "@flagwho/shared": "file:../shared",

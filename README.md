@@ -88,6 +88,7 @@ Local URLs:
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend health: `http://127.0.0.1:3001/health`
+- Backend status: `http://127.0.0.1:3001/status`
 
 LAN testing:
 
@@ -139,6 +140,7 @@ The repo uses three layers of automated coverage:
 
 - Backend Vitest suites cover the validator, game engine, full socket flows, privacy rules, wrong-guess handling, and round transitions.
 - Frontend Vitest covers turn-state gating, score updates, guess modal behavior, and round-over UI sequencing.
+- Frontend reconnect work preserves the active room and player session in browser storage so transient disconnects can be restored.
 - Playwright covers two-browser gameplay, round-over/rematch flow, and mobile portrait behavior.
 
 Test locations:

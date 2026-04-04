@@ -2,7 +2,7 @@ import type { RoomDifficulty } from "@flagwho/shared";
 
 export interface PlayerState {
   playerId: string;
-  socketId: string;
+  socketId: string | null;
   seat: "p1" | "p2";
   displayName: string;
   secretFlagCode: string | null;

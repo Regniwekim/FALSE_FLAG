@@ -15,34 +15,43 @@ export interface ActionErrorPayload {
   message: string;
 }
 
-export interface CreateRoomPayload {
+export interface ClientEventPayload {
+  clientEventId?: string;
+}
+
+export interface CreateRoomPayload extends ClientEventPayload {
   displayName?: string;
   difficulty?: RoomDifficulty;
 }
 
-export interface JoinRoomPayload {
+export interface JoinRoomPayload extends ClientEventPayload {
   roomCode: string;
   displayName?: string;
 }
 
-export interface AskQuestionPayload {
+export interface ReconnectRoomPayload extends ClientEventPayload {
+  roomCode: string;
+  playerId: string;
+}
+
+export interface AskQuestionPayload extends ClientEventPayload {
   question: string;
 }
 
-export interface AnswerQuestionPayload {
+export interface AnswerQuestionPayload extends ClientEventPayload {
   answer: "yes" | "no";
 }
 
-export interface SetFlagEliminationPayload {
+export interface SetFlagEliminationPayload extends ClientEventPayload {
   flagCode: string;
   eliminated: boolean;
 }
 
-export interface MakeGuessPayload {
+export interface MakeGuessPayload extends ClientEventPayload {
   guessedFlagCode: string;
 }
 
-export interface ChatMessagePayload {
+export interface ChatMessagePayload extends ClientEventPayload {
   text: string;
 }
 
@@ -108,12 +117,23 @@ export interface ChatMessageEventPayload {
 }
 
 export interface SyncStatePayload {
+  roundNumber?: number;
   turnState?: TurnState;
   activePlayerId?: string;
+  yourSecretFlag?: string;
+  availableFlagCodes?: string[];
   yourBoardState?: {
     eliminatedFlagCodes: string[];
   };
   roomStatus?: "waiting" | "in-game" | "match-over" | "closed";
+}
+
+export interface ReconnectSuccessPayload {
+  roomCode: string;
+  playerId: string;
+  seat: Seat;
+  difficulty: RoomDifficulty;
+  roomStatus: "waiting" | "in-game" | "match-over" | "closed";
 }
 
 export interface RoundOverPayload {

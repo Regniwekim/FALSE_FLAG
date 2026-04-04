@@ -90,6 +90,15 @@ export class RoomManager {
     return this.rooms.get(roomCode);
   }
 
+  findRoomByPlayerId(playerId: string) {
+    for (const room of this.rooms.values()) {
+      if (room.players.some((player) => player.playerId === playerId)) {
+        return room;
+      }
+    }
+    return null;
+  }
+
   findPlayerRoom(socketId: string) {
     for (const room of this.rooms.values()) {
       if (room.players.some((player) => player.socketId === socketId)) {
@@ -97,5 +106,19 @@ export class RoomManager {
       }
     }
     return null;
+  }
+
+  getRoomCount() {
+    return this.rooms.size;
+  }
+
+  closeRoom(roomCode: string) {
+    const room = this.rooms.get(roomCode);
+    if (!room) {
+      return null;
+    }
+    room.status = "closed";
+    this.rooms.delete(roomCode);
+    return room;
   }
 }
