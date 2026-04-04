@@ -27,13 +27,6 @@
   font-family: var(--font-body);
   color: var(--color-cyan);
   background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(0, 240, 255, 0.02),
-      rgba(0, 240, 255, 0.02) 1px,
-      transparent 1px,
-      transparent 2px
-    ),
     radial-gradient(circle at top, #FF006E22 0, transparent 22%),
     radial-gradient(circle at 80% 20%, #9D4EDD33 0, transparent 18%),
     linear-gradient(135deg, #0A0E27, #1A0B3E 45%, #220033 100%);
@@ -74,6 +67,22 @@ body {
     radial-gradient(circle at 20% 18%, rgba(0, 240, 255, 0.08), transparent 24%),
     radial-gradient(circle at 78% 82%, rgba(255, 0, 110, 0.1), transparent 24%);
   mix-blend-mode: screen;
+}
+
+.app-canvas-noise::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 240, 255, 0.05),
+    rgba(0, 240, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  background-size: 100% 8px;
+  animation: scanline-scroll 8s linear infinite;
+  pointer-events: none;
 }
 
 .app-chrome {
@@ -1609,6 +1618,16 @@ button:disabled {
 
 .map-flag-preview .secret-country-infobox-row dd {
   font-size: 0.84rem;
+}
+
+@keyframes scanline-scroll {
+  from {
+    background-position: 0 0;
+  }
+
+  to {
+    background-position: 0 -300px;
+  }
 }
 
 @keyframes map-flag-preview-fade {
