@@ -14,6 +14,7 @@ type Listener = (payload?: any) => void;
 
 const mocked = vi.hoisted(() => {
   const listeners = new Map<string, Set<Listener>>();
+  const onceWrappers = new Map<Listener, Listener>();
   const emits: Array<{ event: string; payload: any }> = [];
 
   const socket = {
@@ -34,8 +35,29 @@ const mocked = vi.hoisted(() => {
       }
       listeners.get(event)?.add(listener);
     },
+    once(event: string, listener: Listener) {
+      const wrapper: Listener = (payload) => {
+        listener(payload);
+        socket.off(event, listener);
+      };
+      onceWrappers.set(listener, wrapper);
+      socket.on(event, wrapper);
+    },
+    off(event: string, listener: Listener) {
+      const eventListeners = listeners.get(event);
+      if (!eventListeners) {
+        return;
+      }
+      const wrapper = onceWrappers.get(listener);
+      if (wrapper) {
+        eventListeners.delete(wrapper);
+        onceWrappers.delete(listener);
+      }
+      eventListeners.delete(listener);
+    },
     removeAllListeners() {
       listeners.clear();
+      onceWrappers.clear();
       emits.length = 0;
     },
     emit(event: string, payload: any) {
@@ -131,13 +153,126 @@ describe("App turn/state control gating", () => {
       expect(within(intelWindow).queryByText("Round Result")).not.toBeInTheDocument();
       expect(within(intelWindow).queryByText("Difficulty")).not.toBeInTheDocument();
       expect(intelProgress).toHaveAttribute("aria-valuenow", "0");
-      expect(within(intelWindow).getByText("0 / 69 flags eliminated")).toBeInTheDocument();
+      expect(within(intelWindow).getByText(/0\s*\/\s*24\s*flags eliminated/i)).toBeInTheDocument();
       expect(within(intelWindow).getByText("Uplink")).toBeInTheDocument();
       expect(within(intelWindow).getByText("OFFLINE")).toBeInTheDocument();
       expect(within(hiddenCountryPanel).getByTestId("hidden-country-iso")).toHaveTextContent("US");
       expect(within(hiddenCountryPanel).getByRole("button", { name: "Expand hidden country details" })).toBeInTheDocument();
       expect(within(roundConsolePanel).getByRole("button", { name: "Collapse Round Console" })).toHaveAttribute("aria-expanded", "true");
       expect(within(intelWindow).getByRole("button", { name: "Minimize Intel Desk" })).toBeInTheDocument();
+    });
+  });
+
+  it("restores an in-progress game from sync state after reconnect", async () => {
+    render(<App />);
+
+    expect(screen.queryByTestId("intel-window")).not.toBeInTheDocument();
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.SYNC_STATE, {
+      roomStatus: "in-game",
+      roundNumber: 2,
+      activePlayerId: "p2",
+      yourSecretFlag: "ca",
+      availableFlagCodes: TEST_FLAGS,
+      yourBoardState: { eliminatedFlagCodes: ["us", "mx"] }
+    });
+
+    await waitFor(() => {
+      const intelWindow = screen.getByTestId("intel-window");
+      expect(within(intelWindow).getByTestId("hidden-country-iso")).toHaveTextContent("CA");
+      expect(within(intelWindow).getByText("2 / 24 flags eliminated")).toBeInTheDocument();
+    });
+  });
+
+  it("persists displayName to localStorage when a room is created", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByPlaceholderText("Display name"), { target: { value: "Agent" } });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROOM_CREATED, {
+      roomCode: "ABC123",
+      playerId: "p1",
+      seat: "p1",
+      difficulty: "easy"
+    });
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("ff_displayName")).toBe("Agent");
+      expect(window.localStorage.getItem("ff_playerId")).toBe("p1");
+      expect(window.localStorage.getItem("ff_roomCode")).toBe("ABC123");
+    });
+  });
+
+  it("persists displayName to localStorage when a room is joined", async () => {
+    render(<App />);
+
+    fireEvent.change(screen.getByPlaceholderText("Display name"), { target: { value: "Agent" } });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.ROOM_JOINED, {
+      roomCode: "ABC123",
+      playerId: "p1",
+      seat: "p1",
+      difficulty: "easy"
+    });
+
+    await waitFor(() => {
+      expect(window.localStorage.getItem("ff_displayName")).toBe("Agent");
+      expect(window.localStorage.getItem("ff_playerId")).toBe("p1");
+      expect(window.localStorage.getItem("ff_roomCode")).toBe("ABC123");
+    });
+  });
+
+  it("re-emits reconnect-room on every socket reconnect when session is stored", async () => {
+    window.localStorage.setItem("ff_playerId", "p1");
+    window.localStorage.setItem("ff_roomCode", "ABC123");
+    window.localStorage.setItem("ff_displayName", "Agent");
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(mocked.socket.emits.some((e) =>
+        e.event === CLIENT_TO_SERVER.RECONNECT_ROOM &&
+        e.payload.playerId === "p1" &&
+        e.payload.roomCode === "ABC123" &&
+        e.payload.displayName === "Agent"
+      )).toBe(true);
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.RECONNECT_SUCCESS, {
+      roomCode: "ABC123",
+      playerId: "p1",
+      seat: "p1",
+      difficulty: "easy",
+      roomStatus: "in-game"
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Reconnected to room ABC123")).toBeInTheDocument();
+    });
+
+    mocked.socket.emits.length = 0;
+    mocked.socket.disconnect();
+    mocked.socket.connect();
+
+    await waitFor(() => {
+      expect(mocked.socket.emits.some((e) =>
+        e.event === CLIENT_TO_SERVER.RECONNECT_ROOM &&
+        e.payload.playerId === "p1" &&
+        e.payload.roomCode === "ABC123" &&
+        e.payload.displayName === "Agent"
+      )).toBe(true);
+    });
+
+    mocked.socket.emitLocal(SERVER_TO_CLIENT.RECONNECT_SUCCESS, {
+      roomCode: "ABC123",
+      playerId: "p1",
+      seat: "p1",
+      difficulty: "easy",
+      roomStatus: "in-game"
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Reconnected to room ABC123")).toBeInTheDocument();
     });
   });
 
@@ -271,16 +406,10 @@ describe("App turn/state control gating", () => {
     expect(within(creditsDialog).getByText("SimpleMaps Free World SVG Map")).toBeInTheDocument();
     expect(within(creditsDialog).getByText("Flagcdn by Flagpedia")).toBeInTheDocument();
     expect(within(creditsDialog).getByText("Wikipedia Contributors")).toBeInTheDocument();
-    expect(within(creditsDialog).getByText("Special Gothic Expanded One and Share Tech Mono")).toBeInTheDocument();
     expect(within(creditsDialog).getByText(/modified for gameplay metadata/i)).toBeInTheDocument();
-    expect(within(creditsDialog).getByText(/Both fonts are served via Google Fonts under the SIL Open Font License/i)).toBeInTheDocument();
     expect(within(creditsDialog).getByRole("link", { name: "Wikimedia Commons flag sources" })).toHaveAttribute("href", "https://commons.wikimedia.org/wiki/Category:SVG_flags_by_country");
     expect(within(creditsDialog).getByRole("link", { name: "SimpleMaps license" })).toHaveAttribute("href", "https://simplemaps.com/resources/svg-license");
     expect(within(creditsDialog).getByRole("link", { name: "CC BY-SA 4.0 license" })).toHaveAttribute("href", "https://creativecommons.org/licenses/by-sa/4.0/");
-    expect(within(creditsDialog).getByRole("link", { name: "Special Gothic Expanded One source" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Special+Gothic+Expanded+One");
-    expect(within(creditsDialog).getByRole("link", { name: "Special Gothic Expanded One license" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Special+Gothic+Expanded+One/license");
-    expect(within(creditsDialog).getByRole("link", { name: "Share Tech Mono source" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Share+Tech+Mono");
-    expect(within(creditsDialog).getByRole("link", { name: "Share Tech Mono license" })).toHaveAttribute("href", "https://fonts.google.com/specimen/Share+Tech+Mono/license");
 
     fireEvent.click(within(creditsDialog).getByRole("button", { name: "Close" }));
 
@@ -509,7 +638,7 @@ describe("App turn/state control gating", () => {
       expect(updatedUsCard).not.toBeNull();
       expect((updatedUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(true);
       expect(screen.getByRole("progressbar", { name: "Intel gathered" })).toHaveAttribute("aria-valuenow", "4");
-      expect(screen.getByText("1 / 69 flags eliminated")).toBeInTheDocument();
+      expect(screen.getByText((content) => /1\s*\/\s*24\s*flags eliminated/i.test(content))).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByAltText("US").closest("button") as HTMLButtonElement);
@@ -526,7 +655,7 @@ describe("App turn/state control gating", () => {
       const restoredUsCard = screen.getByAltText("US").closest("button") as HTMLButtonElement | null;
       expect(restoredUsCard).not.toBeNull();
       expect((restoredUsCard as HTMLButtonElement).className.includes("flag-card-eliminated")).toBe(false);
-      expect(screen.getByText("0 / 69 flags eliminated")).toBeInTheDocument();
+      expect(screen.getByText((content) => /0\s*\/\s*24\s*flags eliminated/i.test(content))).toBeInTheDocument();
     });
   });
 

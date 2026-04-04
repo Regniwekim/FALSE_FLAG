@@ -1,9 +1,18 @@
 import { defineConfig } from "vite";
+import { dirname, resolve } from "path";
+import { fileURLToPath } from "url";
 import react from "@vitejs/plugin-react";
 import viteCompression from "vite-plugin-compression";
 import svgr from "vite-plugin-svgr";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@flagwho/shared": resolve(__dirname, "../shared/src/index.ts")
+    }
+  },
   plugins: [
     react(),
     svgr(),

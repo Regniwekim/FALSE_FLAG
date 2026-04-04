@@ -6,6 +6,7 @@ import {
   SERVER_TO_CLIENT,
   type RoomCreatedPayload,
   type GameStartedPayload,
+  type ReconnectSuccessPayload,
   type ActionErrorPayload,
   type TurnState,
   type IncomingQuestionPayload,
@@ -413,7 +414,7 @@ const FlagMarker = memo(function FlagMarker({
 function WorldMapBackdrop({ glitchCountryId }: { glitchCountryId?: string }) {
   // Render SVG inline for direct DOM access and styling
   return (
-    <WorldSVG className="world-map-svg" aria-hidden="true" draggable={false} />
+    <WorldSVG className="world-map-svg" aria-hidden="true" />
   );
 }
 
@@ -516,6 +517,8 @@ export function App() {
   const scorePulseTimerRef = useRef<number | null>(null);
   const toastIdRef = useRef(0);
   const playerIdRef = useRef<string | null>(null);
+  const displayNameRef = useRef("");
+  const reconnectListenerRefs = useRef<{ success?: (payload: ReconnectSuccessPayload) => void; actionError?: (payload: ActionErrorPayload) => void }>({});
   const pendingQuestionRef = useRef<string | null>(null);
   const askedQuestionHistoryIdRef = useRef(0);
   const scoreRef = useRef<Record<string, number>>({});
@@ -644,48 +647,79 @@ export function App() {
     if (storedPlayerId && storedRoomCode && storedDisplayName !== null) {
       // Set lobby display name for UI
       setLobby((state) => ({ ...state, displayName: storedDisplayName }));
-      // Attempt reconnect after socket is connected
+
+      const cleanupReconnectHandlers = () => {
+        const { success, actionError } = reconnectListenerRefs.current;
+        if (success) {
+          socket.off?.(SERVER_TO_CLIENT.RECONNECT_SUCCESS, success);
+        }
+        if (actionError) {
+          socket.off?.(SERVER_TO_CLIENT.ACTION_ERROR, actionError);
+        }
+        reconnectListenerRefs.current = {};
+      };
+
       const tryReconnect = () => {
+        const playerIdToReconnect = window.localStorage.getItem("ff_playerId");
+        const roomCodeToReconnect = window.localStorage.getItem("ff_roomCode");
+        const displayNameToReconnect = window.localStorage.getItem("ff_displayName");
+        if (!playerIdToReconnect || !roomCodeToReconnect || displayNameToReconnect === null) {
+          return;
+        }
+
+        cleanupReconnectHandlers();
+
+        const onReconnectSuccess = (payload: ReconnectSuccessPayload) => {
+          setPlayerId(payload.playerId);
+          playerIdRef.current = payload.playerId;
+          setSeat(payload.seat);
+          setRoomCode(payload.roomCode);
+          setRoomDifficulty(payload.difficulty);
+          setStatus("Reconnected to room " + payload.roomCode);
+          pushToast("Session restored!", "success");
+          // Optionally surface game/chat window
+        };
+        const onReconnectError = (payload: ActionErrorPayload) => {
+          // Clear session info and reset lobby
+          window.localStorage.removeItem("ff_playerId");
+          window.localStorage.removeItem("ff_roomCode");
+          window.localStorage.removeItem("ff_displayName");
+          setPlayerId(null);
+          setRoomCode(null);
+          setLobby((state) => ({ ...state, roomCodeInput: "", displayName: "" }));
+          setStatus("Reconnect failed. Please join or create a new room.");
+          pushToast("Reconnect failed. Please join or create a new room.", "error");
+        };
+        const onReconnectActionError = (payload: ActionErrorPayload) => {
+          if (payload.code === "INVALID_STATE" || payload.code === "ROOM_NOT_FOUND") {
+            onReconnectError(payload);
+          }
+        };
+
+        reconnectListenerRefs.current = {
+          success: onReconnectSuccess,
+          actionError: onReconnectActionError
+        };
+
+        socket.once(SERVER_TO_CLIENT.RECONNECT_SUCCESS, onReconnectSuccess);
+        socket.once(SERVER_TO_CLIENT.ACTION_ERROR, onReconnectActionError);
+
         socket.emit(CLIENT_TO_SERVER.RECONNECT_ROOM, {
-          playerId: storedPlayerId,
-          roomCode: storedRoomCode,
-          displayName: storedDisplayName
+          playerId: playerIdToReconnect,
+          roomCode: roomCodeToReconnect,
+          displayName: displayNameToReconnect
         });
       };
+
+      socket.on("connect", tryReconnect);
       if (socket.connected) {
         tryReconnect();
-      } else {
-        socket.once("connect", tryReconnect);
       }
 
-      // Listen for reconnect result
-      const onReconnectSuccess = (payload) => {
-        setPlayerId(payload.playerId);
-        playerIdRef.current = payload.playerId;
-        setSeat(payload.seat);
-        setRoomCode(payload.roomCode);
-        setRoomDifficulty(payload.difficulty);
-        setStatus("Reconnected to room " + payload.roomCode);
-        pushToast("Session restored!", "success");
-        // Optionally surface game/chat window
+      return () => {
+        socket.off?.("connect", tryReconnect);
+        cleanupReconnectHandlers();
       };
-      const onReconnectError = (payload) => {
-        // Clear session info and reset lobby
-        window.localStorage.removeItem("ff_playerId");
-        window.localStorage.removeItem("ff_roomCode");
-        window.localStorage.removeItem("ff_displayName");
-        setPlayerId(null);
-        setRoomCode(null);
-        setLobby((state) => ({ ...state, roomCodeInput: "", displayName: "" }));
-        setStatus("Reconnect failed. Please join or create a new room.");
-        pushToast("Reconnect failed. Please join or create a new room.", "error");
-      };
-      socket.once(SERVER_TO_CLIENT.RECONNECT_SUCCESS, onReconnectSuccess);
-      socket.once(SERVER_TO_CLIENT.ACTION_ERROR, (payload) => {
-        if (payload.code === "INVALID_STATE" || payload.code === "ROOM_NOT_FOUND") {
-          onReconnectError(payload);
-        }
-      });
     }
   }, []);
 
@@ -713,6 +747,10 @@ export function App() {
   useEffect(() => {
     playerIdRef.current = playerId;
   }, [playerId]);
+
+  useEffect(() => {
+    displayNameRef.current = lobby.displayName;
+  }, [lobby.displayName]);
 
   useEffect(() => {
     pendingQuestionRef.current = pendingQuestionText;
@@ -790,10 +828,10 @@ export function App() {
       setStatus(`Room ${payload.roomCode} created. Waiting for opponent.`);
       pushToast(`Room ${payload.roomCode} is live. Waiting for rival.`, "success");
         // Log and save session info
-        console.log("[SESSION] ROOM_CREATED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
+        console.log("[SESSION] ROOM_CREATED: playerId=", payload.playerId, "roomCode=", payload.roomCode);
         window.localStorage.setItem("ff_playerId", payload.playerId);
         window.localStorage.setItem("ff_roomCode", payload.roomCode);
-        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
+        window.localStorage.setItem("ff_displayName", displayNameRef.current);
     });
 
     socket.on(SERVER_TO_CLIENT.ROOM_JOINED, (payload: RoomCreatedPayload) => {
@@ -806,10 +844,10 @@ export function App() {
       setStatus(`Joined room ${payload.roomCode}. Starting game...`);
       pushToast(`Joined room ${payload.roomCode}. Syncing mission.`, "success");
         // Log and save session info
-        console.log("[SESSION] ROOM_JOINED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
+        console.log("[SESSION] ROOM_JOINED: playerId=", payload.playerId, "roomCode=", payload.roomCode);
         window.localStorage.setItem("ff_playerId", payload.playerId);
         window.localStorage.setItem("ff_roomCode", payload.roomCode);
-        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
+        window.localStorage.setItem("ff_displayName", displayNameRef.current);
     });
 
     socket.on(SERVER_TO_CLIENT.GAME_STARTED, (payload: GameStartedPayload) => {
@@ -835,11 +873,8 @@ export function App() {
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("Game started");
       pushToast(`Round ${payload.roundNumber} is live.`, "success");
-        // Log and save session info
-        console.log("[SESSION] GAME_STARTED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
-        window.localStorage.setItem("ff_playerId", payload.playerId);
-        window.localStorage.setItem("ff_roomCode", payload.roomCode);
-        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
+        // Log session info
+        console.log("[SESSION] GAME_STARTED: roomStatus=in-game, roundNumber=", payload.roundNumber);
     });
 
     socket.on(SERVER_TO_CLIENT.NEW_GAME_STARTED, (payload: GameStartedPayload) => {
@@ -866,11 +901,8 @@ export function App() {
       setGuessFlagCode(payload.availableFlagCodes[0] ?? DEFAULT_FLAG_CODES[0]);
       setStatus("New game started");
       pushToast("Rematch deployed. New intel assigned.", "success");
-        // Log and save session info
-        console.log("[SESSION] NEW_GAME_STARTED: playerId=", payload.playerId, "roomCode=", payload.roomCode, "displayName=", payload.displayName);
-        window.localStorage.setItem("ff_playerId", payload.playerId);
-        window.localStorage.setItem("ff_roomCode", payload.roomCode);
-        if (payload.displayName) window.localStorage.setItem("ff_displayName", payload.displayName);
+        // Log session info
+        console.log("[SESSION] NEW_GAME_STARTED: roundNumber=", payload.roundNumber);
     });
 
     socket.on(SERVER_TO_CLIENT.TURN_STATE_CHANGED, (payload: { state: TurnState }) => {
@@ -947,11 +979,59 @@ export function App() {
       if (payload.turnState) {
         setTurnState(payload.turnState);
       }
-      if (payload.activePlayerId) {
-        patchGameInfo({ activePlayerId: payload.activePlayerId });
-      }
+
       if (payload.yourBoardState) {
         setEliminatedCodes(payload.yourBoardState.eliminatedFlagCodes);
+      }
+
+      if (payload.roomStatus === "in-game") {
+        setGameInfo((currentGameInfo) => {
+          const patch: Partial<GameStartedPayload> = {};
+
+          if (typeof payload.roundNumber === "number") {
+            patch.roundNumber = payload.roundNumber;
+          }
+          if (typeof payload.yourSecretFlag === "string") {
+            patch.yourSecretFlag = payload.yourSecretFlag;
+          }
+          if (payload.activePlayerId) {
+            patch.activePlayerId = payload.activePlayerId;
+          }
+          if (Array.isArray(payload.availableFlagCodes)) {
+            patch.availableFlagCodes = payload.availableFlagCodes;
+          }
+          if (payload.yourBoardState) {
+            patch.yourBoardState = {
+              eliminatedFlagCodes: payload.yourBoardState.eliminatedFlagCodes
+            };
+          }
+
+          if (!currentGameInfo) {
+            if (
+              typeof payload.roundNumber === "number" &&
+              typeof payload.yourSecretFlag === "string" &&
+              Array.isArray(payload.availableFlagCodes)
+            ) {
+              return {
+                roundNumber: payload.roundNumber,
+                activePlayerId: payload.activePlayerId ?? "",
+                yourSecretFlag: payload.yourSecretFlag,
+                availableFlagCodes: payload.availableFlagCodes,
+                yourBoardState: {
+                  eliminatedFlagCodes: payload.yourBoardState?.eliminatedFlagCodes ?? []
+                }
+              };
+            }
+
+            return null;
+          }
+
+          return Object.keys(patch).length > 0
+            ? { ...currentGameInfo, ...patch }
+            : currentGameInfo;
+        });
+      } else if (payload.activePlayerId) {
+        patchGameInfo({ activePlayerId: payload.activePlayerId });
       }
     });
 
